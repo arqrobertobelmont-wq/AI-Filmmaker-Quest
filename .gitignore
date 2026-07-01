@@ -1,0 +1,17 @@
+# dependencias (se reinstalan con npm install)
+node_modules/
+
+# build de producción (se regenera con npm run build)
+dist/
+
+# logs y temporales
+*.log
+.DS_Store
+
+# config local de Claude Code (específica de tu máquina)
+.claude/settings.local.json
+
+# variables de entorno (claves secretas — nunca subir)
+.env
+.env.local
+.env.*.local
