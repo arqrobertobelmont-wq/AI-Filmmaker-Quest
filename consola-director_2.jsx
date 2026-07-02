@@ -82,7 +82,7 @@ const WEEK_GOAL_H = 35;                 // meta de horas foco / semana
 const STUDY_GOAL_H = 4;                 // meta de study / semana
 
 const STORAGE_KEY = "director-console-v1";
-const EMPTY = { pieces: [], practice: [], bosses: DEFAULT_BOSSES, streak: { count: 0, lastDate: null }, activeTimer: null, weeks: [], weekMinutes: {}, campaign: null };
+const EMPTY = { pieces: [], practice: [], bosses: DEFAULT_BOSSES, streak: { count: 0, lastDate: null }, activeTimer: null, weeks: [], weekMinutes: {}, campaigns: [], mainFilmId: null, notes: [] };
 
 // migra piezas viejas al modelo actual
 const OLD_PHASE_MAP = { idea: "idea", writing: "writing", audio: "storyboard", storyboard: "storyboard", visual: "visual", shots: "shots", edit: "edit", post: "post", review: "review", final: "final" };
@@ -203,7 +203,11 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
 
   useEffect(() => {
     (async () => {
-      try { const r = await window.storage.get(STORAGE_KEY); if (r && r.value) { const d = JSON.parse(r.value); setState({ ...EMPTY, ...d, pieces: (d.pieces || []).map(migratePiece), practice: (d.practice || []).map(migrateSession), bosses: d.bosses?.length ? d.bosses : DEFAULT_BOSSES }); } }
+      try { const r = await window.storage.get(STORAGE_KEY); if (r && r.value) { const d = JSON.parse(r.value);
+        // migra campaña única vieja -> lista + principal
+        let campaigns = d.campaigns; let mainFilmId = d.mainFilmId;
+        if (!campaigns) { campaigns = d.campaign ? [d.campaign] : []; mainFilmId = d.campaign ? d.campaign.filmId : null; }
+        setState({ ...EMPTY, ...d, campaigns, mainFilmId, pieces: (d.pieces || []).map(migratePiece), practice: (d.practice || []).map(migrateSession), bosses: d.bosses?.length ? d.bosses : DEFAULT_BOSSES }); } }
       catch (e) { } finally { setLoading(false); }
     })();
   }, []);
@@ -275,18 +279,32 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
     persist({ ...state, weeks: [...others, snap].sort((a, b) => b.weekStart.localeCompare(a.weekStart)) });
   };
   const removePiece = (id) => persist({ ...state, pieces: state.pieces.filter((p) => p.id !== id).map((p, i) => ({ ...p, n: i + 1 })) });
-  const setCampaign = (c) => persist({ ...state, campaign: c });
+  const activateCampaign = (filmId) => {
+    if (state.campaigns.some((c) => c.filmId === filmId)) return;
+    const campaigns = [...state.campaigns, { filmId, start: todayStr() }];
+    persist({ ...state, campaigns, mainFilmId: state.mainFilmId ?? filmId });
+  };
+  const deactivateCampaign = (filmId) => {
+    const campaigns = state.campaigns.filter((c) => c.filmId !== filmId);
+    const mainFilmId = state.mainFilmId === filmId ? (campaigns[0]?.filmId ?? null) : state.mainFilmId;
+    persist({ ...state, campaigns, mainFilmId });
+  };
+  const setMainCampaign = (filmId) => persist({ ...state, mainFilmId: filmId });
+  const addNote = (text, filmId = null, title = "") => persist({ ...state, notes: [{ id: Date.now(), title, text, date: todayStr(), filmId, pinned: false }, ...(state.notes || [])] });
+  const removeNote = (id) => persist({ ...state, notes: (state.notes || []).filter((n) => n.id !== id) });
+  const editNote = (id, text, title = "") => persist({ ...state, notes: (state.notes || []).map((n) => n.id === id ? { ...n, text, title } : n) });
+  const togglePinNote = (id) => persist({ ...state, notes: (state.notes || []).map((n) => n.id === id ? { ...n, pinned: !n.pinned } : n) });
 
   const at = state.activeTimer;
   const remaining = at ? at.startTs + at.durationMin * 60000 - Date.now() : 0;
   const rmm = Math.max(0, Math.floor(remaining / 60000));
   const rss = Math.max(0, Math.floor((remaining % 60000) / 1000));
 
-  const TABS = [["clases", "CLASES"], ["panel", "SKILLS"], ["log", "BITÁCORA"], ["pieces", "PIEZAS"], ["logros", "LOGROS"], ["boss", "BOSSES"]];
+  const TABS = [["clases", "CLASES"], ["panel", "SKILLS"], ["log", "BITÁCORA"], ["pieces", "PIEZAS"], ["logros", "NOTAS"], ["boss", "BOSSES"]];
   const NAV = [
     ["clases", "Dashboard", "▤"], ["log", "Sesiones", "◷"], ["pieces", "Films", "▶"],
     ["clases", "Clases", "★"], ["panel", "Skills", "✦"], ["log", "Bitácora", "▦"],
-    ["pieces", "Piezas", "◧"], ["logros", "Logros", "▲"], ["boss", "Bosses", "☠"],
+    ["pieces", "Piezas", "◧"], ["logros", "Notas", "▲"], ["boss", "Bosses", "☠"],
     ["tienda", "Tienda", "◆"], ["ajustes", "Ajustes", "⚙"],
   ];
   const recent = [...state.practice].sort((a, b) => (b.date + (b.start || "")).localeCompare(a.date + (a.start || ""))).slice(0, 30);
@@ -490,12 +508,16 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
           )}
 
           {tab === "boss" && (
-            <BossTab state={state} onSetCampaign={setCampaign} />
+            <BossTab state={state} onActivate={activateCampaign} onDeactivate={deactivateCampaign} onSetMain={setMainCampaign} onTogglePhase={togglePhase} />
           )}
 
-          {["logros", "tienda", "ajustes"].includes(tab) && (
+          {tab === "logros" && (
+            <NotesTab notes={state.notes || []} films={state.pieces} onAdd={addNote} onRemove={removeNote} onEdit={editNote} onTogglePin={togglePinNote} />
+          )}
+
+          {["tienda", "ajustes"].includes(tab) && (
             <div style={{ ...panel({ borderRadius: 0 }), padding: 24, textAlign: "center" }}>
-              <div style={{ fontFamily: PX, fontSize: 11, color: C.gold, marginBottom: 12 }}>{tab === "logros" ? "LOGROS" : tab === "tienda" ? "TIENDA" : "AJUSTES"}</div>
+              <div style={{ fontFamily: PX, fontSize: 11, color: C.gold, marginBottom: 12 }}>{tab === "tienda" ? "TIENDA" : "AJUSTES"}</div>
               <div style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>Próximamente. Todavía no le dimos función a esta sección — la definimos más adelante.</div>
             </div>
           )}
@@ -878,7 +900,7 @@ function ProjectForm({ onAdd, onCancel, existing }) {
   );
 }
 
-function BossTab({ state, onSetCampaign }) {
+function BossTab({ state, onActivate, onDeactivate, onSetMain, onTogglePhase }) {
   // ----- goals de constancia (semana en curso) -----
   const wkStart = mondayOf(todayStr());
   const wk = state.practice.filter((s) => s.date >= wkStart);
@@ -886,8 +908,13 @@ function BossTab({ state, onSetCampaign }) {
   const studyH = wk.filter((s) => s.film === "study").reduce((a, s) => a + (s.minutes || 0), 0) / 60;
 
   const activeFilms = state.pieces.filter((p) => !isFinal(p));
-  const camp = state.campaign;
-  const campFilm = camp ? state.pieces.find((p) => p.id === camp.filmId) : null;
+  const campaigns = state.campaigns || [];
+  const activatedIds = new Set(campaigns.map((c) => c.filmId));
+  const notActivated = activeFilms.filter((p) => !activatedIds.has(p.id));
+  const mainId = state.mainFilmId;
+  const mainCamp = campaigns.find((c) => c.filmId === mainId);
+  const mainFilm = mainCamp ? state.pieces.find((p) => p.id === mainCamp.filmId) : null;
+  const secondaries = campaigns.filter((c) => c.filmId !== mainId);
 
   return (
     <div>
@@ -899,25 +926,42 @@ function BossTab({ state, onSetCampaign }) {
         <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginTop: 6 }}>Se llenan solas con tus sesiones y se reinician cada lunes.</p>
       </div>
 
-      {/* BOSS DE CAMPAÑA */}
-      <div style={{ ...panel({ borderRadius: 0, borderColor: campFilm ? C.gold : C.line }), padding: 12 }}>
-        <div style={{ fontFamily: PX, fontSize: 8, color: C.gold, marginBottom: 12 }}>🐉 BOSS DE CAMPAÑA</div>
-
-        {!campFilm ? (
-          <div>
-            <p style={{ fontFamily: MONO, fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
-              {activeFilms.length ? "Activá un film para desplegar sus 4 etapas con presupuesto de horas y fechas de cierre." : "Creá un film en PIEZAS para poder activar una campaña."}
-            </p>
-            {activeFilms.map((p) => (
-              <button key={p.id} onClick={() => onSetCampaign({ filmId: p.id, start: todayStr() })} style={{ width: "100%", textAlign: "left", padding: 12, marginBottom: 8, cursor: "pointer", fontFamily: MONO, fontSize: 13, color: C.cream, background: C.bg, border: `2px solid ${C.line}` }}>
-                ▶ Activar: {p.film} <span style={{ color: C.muted, fontSize: 11 }}>({p.minutes} min → {filmBudgetH(p.minutes)}h)</span>
-              </button>
-            ))}
-          </div>
+      {/* BOSS PRINCIPAL (con deadline) */}
+      <div style={{ ...panel({ borderRadius: 0, borderColor: mainFilm ? C.gold : C.line }), padding: 12, marginBottom: 12 }}>
+        <div style={{ fontFamily: PX, fontSize: 8, color: C.gold, marginBottom: 12 }}>🐉 BOSS PRINCIPAL</div>
+        {mainFilm ? (
+          <Campaign film={mainFilm} start={mainCamp.start} sessions={state.practice} onClear={() => onDeactivate(mainFilm.id)} />
         ) : (
-          <Campaign film={campFilm} start={camp.start} sessions={state.practice} onClear={() => onSetCampaign(null)} />
+          <p style={{ fontFamily: MONO, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+            {activeFilms.length ? "Activá un film abajo para ponerlo como boss principal: despliega sus etapas con presupuesto de horas y fechas de cierre." : "Creá un film en PIEZAS para poder activar una campaña."}
+          </p>
         )}
       </div>
+
+      {/* EN PARALELO (sin deadline) */}
+      {secondaries.length > 0 && (
+        <div style={{ ...panel({ borderRadius: 0 }), padding: 12, marginBottom: 12 }}>
+          <div style={{ fontFamily: PX, fontSize: 8, color: C.cyan, marginBottom: 4 }}>🎬 EN PARALELO</div>
+          <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginBottom: 12 }}>Films activos sin deadline. Registrás horas y ves progreso; cuando quieras, hacé principal a uno.</p>
+          {secondaries.map((c) => {
+            const film = state.pieces.find((p) => p.id === c.filmId);
+            if (!film) return null;
+            return <CampaignLite key={c.filmId} film={film} sessions={state.practice} onMakeMain={() => onSetMain(film.id)} onClear={() => onDeactivate(film.id)} onTogglePhase={(phaseId) => onTogglePhase(film.id, phaseId)} />;
+          })}
+        </div>
+      )}
+
+      {/* ACTIVAR MÁS FILMS */}
+      {notActivated.length > 0 && (
+        <div style={{ ...panel({ borderRadius: 0 }), padding: 12 }}>
+          <div style={{ fontFamily: PX, fontSize: 8, color: C.muted, marginBottom: 12 }}>+ ACTIVAR FILM</div>
+          {notActivated.map((p) => (
+            <button key={p.id} onClick={() => onActivate(p.id)} style={{ width: "100%", textAlign: "left", padding: 12, marginBottom: 8, cursor: "pointer", fontFamily: MONO, fontSize: 13, color: C.cream, background: C.bg, border: `2px solid ${C.line}`, borderRadius: 8 }}>
+              ▶ Activar: {p.film} <span style={{ color: C.muted, fontSize: 11 }}>({p.minutes} min → {filmBudgetH(p.minutes)}h)</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -932,6 +976,140 @@ function GoalBar({ label, cur, goal, color }) {
         <span style={{ fontFamily: PX, fontSize: 8, color: done ? C.green : color }}>{cur.toFixed(1)}/{goal}h</span>
       </div>
       <SegBar pct={pct} color={done ? C.green : color} blocks={14} />
+    </div>
+  );
+}
+
+// bloc de notas / recordatorios (general o por film; con pin y edición)
+function NotesTab({ notes, films, onAdd, onRemove, onEdit, onTogglePin }) {
+  const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
+  const [scope, setScope] = useState("global"); // "global" | filmId
+  const [filter, setFilter] = useState("all");   // "all" | "global" | filmId
+  const [editing, setEditing] = useState(null);   // id en edición
+  const [editTitle, setEditTitle] = useState("");
+  const [editText, setEditText] = useState("");
+
+  const filmName = (id) => films.find((f) => f.id === id)?.film || "Film";
+  const selStyle = { background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: "8px 10px", fontSize: 12.5, fontFamily: MONO, borderRadius: 8 };
+  const titleStyle = { width: "100%", background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: "9px 11px", fontSize: 13, fontFamily: MONO, borderRadius: 8, marginBottom: 8, fontWeight: 700 };
+
+  const submit = () => { const t = text.trim(); if (!t) return; onAdd(t, scope === "global" ? null : scope, title.trim()); setText(""); setTitle(""); };
+  const startEdit = (n) => { setEditing(n.id); setEditText(n.text); setEditTitle(n.title || ""); };
+  const saveEdit = () => { const t = editText.trim(); if (t) onEdit(editing, t, editTitle.trim()); setEditing(null); };
+
+  const shown = notes
+    .filter((n) => filter === "all" ? true : filter === "global" ? !n.filmId : n.filmId === filter)
+    .slice()
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)); // fijadas arriba (estable)
+
+  return (
+    <div>
+      {/* NUEVA NOTA */}
+      <div style={{ ...panel({ borderRadius: 0 }), padding: 12, marginBottom: 12 }}>
+        <div style={{ fontFamily: PX, fontSize: 8, color: C.gold, marginBottom: 10 }}>📝 NUEVA NOTA</div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título (opcional)" style={titleStyle} />
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Ej: estructura del guion (setup → conflicto → clímax → resolución), checklist de rodaje, ideas sueltas…"
+          rows={3}
+          style={{ width: "100%", background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: "10px 11px", fontSize: 13.5, fontFamily: MONO, borderRadius: 8, resize: "vertical", lineHeight: 1.5 }}
+        />
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+          <span style={{ fontFamily: PX, fontSize: 7, color: C.muted }}>PARA:</span>
+          <select value={scope} onChange={(e) => setScope(e.target.value)} style={selStyle}>
+            <option value="global">General</option>
+            {films.map((f) => <option key={f.id} value={f.id}>🎬 {f.film}</option>)}
+          </select>
+          <button onClick={submit} style={{ marginLeft: "auto", padding: "10px 18px", fontFamily: PX, fontSize: 8, color: C.ink, background: C.gold, border: `2px solid ${C.ink}`, borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>+ GUARDAR</button>
+        </div>
+      </div>
+
+      {/* FILTRO */}
+      {notes.length > 0 && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontFamily: PX, fontSize: 7, color: C.muted }}>VER:</span>
+          <select value={filter} onChange={(e) => setFilter(e.target.value)} style={selStyle}>
+            <option value="all">Todas</option>
+            <option value="global">General</option>
+            {films.map((f) => <option key={f.id} value={f.id}>🎬 {f.film}</option>)}
+          </select>
+        </div>
+      )}
+
+      {shown.length === 0 ? (
+        <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5, padding: "4px 2px" }}>{notes.length === 0 ? "Todavía no hay notas. Anotá recordatorios, estructuras, ideas — se quedan acá hasta que las borres." : "No hay notas en este filtro."}</p>
+      ) : (
+        shown.map((n) => (
+          <div key={n.id} style={{ ...panel({ borderRadius: 0, borderColor: n.pinned ? C.gold : C.frame }), padding: 12, marginBottom: 8 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: PX, fontSize: 6.5, color: n.filmId ? C.cyan : C.muted, background: C.bg, border: `2px solid ${C.line}`, borderRadius: 5, padding: "3px 6px" }}>{n.filmId ? `🎬 ${filmName(n.filmId)}` : "GENERAL"}</span>
+              {n.pinned && <span style={{ fontFamily: PX, fontSize: 6.5, color: C.gold }}>📌 FIJADA</span>}
+              <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                <button onClick={() => onTogglePin(n.id)} title="Fijar/desfijar" style={{ fontFamily: PX, fontSize: 8, color: n.pinned ? C.gold : C.muted, background: "none", border: `2px solid ${C.line}`, borderRadius: 6, padding: "5px 7px", cursor: "pointer" }}>📌</button>
+                {editing !== n.id && <button onClick={() => startEdit(n)} title="Editar" style={{ fontFamily: PX, fontSize: 8, color: C.cyan, background: "none", border: `2px solid ${C.line}`, borderRadius: 6, padding: "5px 7px", cursor: "pointer" }}>✎</button>}
+                <button onClick={() => onRemove(n.id)} title="Borrar" style={{ fontFamily: PX, fontSize: 8, color: C.muted, background: "none", border: `2px solid ${C.line}`, borderRadius: 6, padding: "5px 7px", cursor: "pointer" }}>✕</button>
+              </span>
+            </div>
+
+            {editing === n.id ? (
+              <div>
+                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Título (opcional)" style={{ ...titleStyle, border: `2px solid ${C.cyan}` }} />
+                <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} autoFocus style={{ width: "100%", background: C.bg, border: `2px solid ${C.cyan}`, color: C.cream, padding: "10px 11px", fontSize: 13.5, fontFamily: MONO, borderRadius: 8, resize: "vertical", lineHeight: 1.5 }} />
+                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 8 }}>
+                  <button onClick={() => setEditing(null)} style={{ padding: "7px 12px", fontFamily: PX, fontSize: 7, color: C.muted, background: "none", border: `2px solid ${C.line}`, borderRadius: 6, cursor: "pointer" }}>CANCELAR</button>
+                  <button onClick={saveEdit} style={{ padding: "7px 14px", fontFamily: PX, fontSize: 7, color: C.ink, background: C.cyan, border: `2px solid ${C.ink}`, borderRadius: 6, cursor: "pointer", fontWeight: 700 }}>GUARDAR</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {n.title && <div style={{ fontFamily: PX, fontSize: 9, color: C.gold, lineHeight: 1.4, marginBottom: 8 }}>{n.title}</div>}
+                <div style={{ fontFamily: MONO, fontSize: 13.5, color: C.cream, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{n.text}</div>
+                <div style={{ fontFamily: PX, fontSize: 6.5, color: C.muted, marginTop: 8 }}>{n.date}</div>
+              </>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// campaña secundaria: fases (checkbox + horas), progreso, sin deadline
+function CampaignLite({ film, sessions, onMakeMain, onClear, onTogglePhase }) {
+  const budgetTotal = filmBudgetH(film.minutes);
+  const fsessions = sessions.filter((s) => s.film === film.id);
+  const doneH = fsessions.reduce((a, s) => a + (s.minutes || 0), 0) / 60;
+  const pct = Math.min(100, Math.round((doneH / budgetTotal) * 100));
+  const nPhases = phasesDone(film);
+  const phaseMin = {};
+  fsessions.forEach((s) => { if (s.phase) phaseMin[s.phase] = (phaseMin[s.phase] || 0) + (s.minutes || 0); });
+  return (
+    <div style={{ background: C.bg, border: `2px solid ${C.line}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+      <div style={{ fontFamily: MONO, fontSize: 13, color: C.cream, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{film.film}</div>
+      <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, margin: "3px 0 8px" }}>{doneH.toFixed(1)} / {budgetTotal}h · {nPhases}/{PHASES.length} fases</div>
+      <SegBar pct={pct} color={C.cyan} blocks={14} />
+
+      {/* fases con checkbox + horas */}
+      <div style={{ marginTop: 10 }}>
+        {PHASES.map((ph) => {
+          const on = !!film.phases[ph.id];
+          const h = (phaseMin[ph.id] || 0) / 60;
+          return (
+            <button key={ph.id} onClick={() => onTogglePhase(ph.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", marginBottom: 4, cursor: "pointer", fontFamily: MONO, fontSize: 11.5, textAlign: "left", border: `2px solid ${on ? C.cyan : C.line}`, borderRadius: 6, background: on ? "rgba(63,217,217,.10)" : "transparent", color: on ? C.cream : C.muted }}>
+              <span style={{ width: 13, height: 13, flexShrink: 0, border: `2px solid ${on ? C.cyan : C.muted}`, background: on ? C.cyan : "transparent", color: C.bg, fontSize: 9, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 3 }}>{on ? "✓" : ""}</span>
+              <span style={{ flex: 1 }}>{ph.name}</span>
+              <span style={{ fontFamily: PX, fontSize: 7, color: h > 0 ? C.cyan : C.muted }}>{h.toFixed(1)}h</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        <button onClick={onMakeMain} style={{ flex: 1, padding: "7px", fontFamily: PX, fontSize: 7, color: C.bg, background: C.gold, border: "none", borderRadius: 6, cursor: "pointer" }}>★ HACER PRINCIPAL</button>
+        <button onClick={onClear} style={{ padding: "7px 10px", fontFamily: PX, fontSize: 7, color: C.muted, background: "none", border: `2px solid ${C.line}`, borderRadius: 6, cursor: "pointer" }}>QUITAR</button>
+      </div>
     </div>
   );
 }
