@@ -191,7 +191,7 @@ const box9 = (active) => ({
 // parchment / aged-paper surface for scroll-style cards
 const parch = (e = {}) => ({ background: C.parch, color: "#3A2E12", border: `4px solid ${C.parchInk}`, boxShadow: `0 0 0 3px ${C.ink}, 0 5px 0 rgba(0,0,0,.30)`, borderRadius: 10, ...e, backgroundImage: "repeating-linear-gradient(0deg, rgba(122,106,62,.06) 0 1px, transparent 1px 3px)" });
 
-export default function ArcadeConsole() {
+export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   const [state, setState] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -326,7 +326,8 @@ export default function ArcadeConsole() {
             <span className="logo-slime" style={{ fontSize: 12, flex: 1, lineHeight: 1.3 }}>AI FILMMAKER<br/>QUEST</span>
             <span style={{ fontSize: 15, color: C.muted }}>🔔</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: PX, fontSize: 9, color: C.gold, border: `3px solid ${C.ink}`, borderRadius: 10, background: C.surface, padding: "7px 11px", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}>◆ 0</span>
-            <div style={{ width: 38, height: 38, border: `3px solid ${C.ink}`, borderRadius: 10, background: C.bgDeep, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}><PixelWizard tier={idx} decay={est.decay} size={30} /></div>
+            <div title={userEmail || ""} style={{ width: 38, height: 38, border: `3px solid ${C.ink}`, borderRadius: 10, background: C.bgDeep, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}><PixelWizard tier={idx} decay={est.decay} size={30} /></div>
+            {onLogout && <button onClick={onLogout} title="Cerrar sesión" style={{ fontFamily: PX, fontSize: 8, color: C.muted, background: C.surface, border: `3px solid ${C.ink}`, borderRadius: 10, padding: "8px 10px", cursor: "pointer", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}>SALIR</button>}
           </div>
 
           {/* HERO ROW */}
