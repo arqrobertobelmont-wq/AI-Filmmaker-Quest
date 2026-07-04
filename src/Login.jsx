@@ -20,14 +20,14 @@ export default function Login() {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email: email.trim(), password: pass });
         if (error) throw error;
-        setMsg("Cuenta creada. Si te pide confirmar el email, revisá tu casilla. Si no, ya podés entrar.");
+        setMsg("Cuenta creada. Si te pide confirmar el email, revisa tu casilla. Si no, ya podes entrar.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pass });
         if (error) throw error;
         // al loguearse, el listener de main.jsx se encarga de mostrar la app
       }
     } catch (e2) {
-      setErr(e2.message || "Algo salió mal.");
+      setErr(e2.message || "Algo salio mal.");
     } finally {
       setBusy(false);
     }
@@ -40,13 +40,13 @@ export default function Login() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');`}</style>
       <div style={{ width: 380, maxWidth: "100%", background: C.surface, border: `4px solid ${C.line}`, boxShadow: `0 0 0 3px ${C.ink}, 0 6px 0 rgba(0,0,0,.4)`, borderRadius: 14, padding: 26 }}>
         <div style={{ fontFamily: PX, fontSize: 14, color: C.green, textAlign: "center", lineHeight: 1.5, textShadow: `2px 2px 0 ${C.ink}`, marginBottom: 6 }}>AI FILMMAKER<br />QUEST</div>
-        <div style={{ fontFamily: PX, fontSize: 8, color: C.cyan, textAlign: "center", marginBottom: 22 }}>{mode === "login" ? "INICIÁ SESIÓN" : "CREÁ TU CUENTA"}</div>
+        <div style={{ fontFamily: PX, fontSize: 8, color: C.cyan, textAlign: "center", marginBottom: 22 }}>{mode === "login" ? "INICIA SESION" : "CREA TU CUENTA"}</div>
 
         <form onSubmit={submit}>
           <label style={{ fontFamily: PX, fontSize: 7, color: C.muted, display: "block", marginBottom: 6 }}>EMAIL</label>
           <input style={input} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="vos@email.com" autoComplete="email" />
           <label style={{ fontFamily: PX, fontSize: 7, color: C.muted, display: "block", marginBottom: 6 }}>CONTRASEÑA</label>
-          <input style={input} type="password" required minLength={6} value={pass} onChange={(e) => setPass(e.target.value)} placeholder="mínimo 6 caracteres" autoComplete={mode === "login" ? "current-password" : "new-password"} />
+          <input style={input} type="password" required minLength={6} value={pass} onChange={(e) => setPass(e.target.value)} placeholder="minimo 6 caracteres" autoComplete={mode === "login" ? "current-password" : "new-password"} />
 
           {err && <div style={{ color: C.danger, fontSize: 12, marginBottom: 12 }}>{err}</div>}
           {msg && <div style={{ color: C.green, fontSize: 12, marginBottom: 12 }}>{msg}</div>}
@@ -57,9 +57,9 @@ export default function Login() {
         </form>
 
         <div style={{ textAlign: "center", marginTop: 18, fontFamily: MONO, fontSize: 12, color: C.muted }}>
-          {mode === "login" ? "¿No tenés cuenta? " : "¿Ya tenés cuenta? "}
+          {mode === "login" ? "¿No tenes cuenta? " : "¿Ya tenes cuenta? "}
           <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setErr(null); setMsg(null); }} style={{ background: "none", border: "none", color: C.cyan, cursor: "pointer", fontFamily: MONO, fontSize: 12, textDecoration: "underline" }}>
-            {mode === "login" ? "Registrate" : "Iniciá sesión"}
+            {mode === "login" ? "Registrate" : "Inicia sesion"}
           </button>
         </div>
       </div>

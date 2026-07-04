@@ -24,12 +24,12 @@ const MONO = "ui-monospace,'Cascadia Code','Roboto Mono',monospace";
 
 // ---------- class ladder ----------
 const CLASSES = [
-  { name: "Aprendiz de Píxeles", min: 0, blurb: "Flacucho, sin gorro, con un palito. Todos empezamos acá.", robe: "#8E84C0", hat: "#5A5480" },
-  { name: "Domador de Prompts", min: 300, blurb: "Le pusiste lentes de nerd y un báculo. El modelo te obedece.", robe: "#3E9BE0", hat: "#2C5C90" },
+  { name: "Aprendiz de Pixeles", min: 0, blurb: "Flacucho, sin gorro, con un palito. Todos empezamos aca.", robe: "#8E84C0", hat: "#5A5480" },
+  { name: "Domador de Prompts", min: 300, blurb: "Le pusiste lentes de nerd y un baculo. El modelo te obedece.", robe: "#3E9BE0", hat: "#2C5C90" },
   { name: "Bardo del Render", min: 900, blurb: "Barba sabia y primera medalla. Tus historias emocionan.", robe: "#5BD66E", hat: "#34803F" },
   { name: "Alquimista del Montaje", min: 2000, blurb: "Empezaste a hacer fierro. Brazos de cortar timelines.", robe: "#A86BE0", hat: "#6E3BA8" },
   { name: "Director Hechicero", min: 4000, blurb: "Lentes de sol, pecho de medallas, swole confirmado.", robe: "#FF5DA2", hat: "#C13B78" },
-  { name: "Ultimate AI Wizard", min: 7000, blurb: "Corona, músculos imposibles, aura dorada. Una bestia.", robe: "#FFC53D", hat: "#E0941F", glow: true },
+  { name: "Ultimate AI Wizard", min: 7000, blurb: "Corona, musculos imposibles, aura dorada. Una bestia.", robe: "#FFC53D", hat: "#E0941F", glow: true },
 ];
 
 const BRANCHES = [
@@ -46,7 +46,7 @@ const BRANCH_THRESHOLDS = [0, 50, 150, 350, 700, 1200];
 const DEFAULT_BOSSES = [
   { id: "b1", label: "Un corto que haga llorar a un test-viewer", done: false },
   { id: "b2", label: "Plano-secuencia de 60s, sin cortes, consistencia perfecta de personaje", done: false },
-  { id: "b3", label: "Una escena que funcione solo con sonido (mute el diálogo y se entiende)", done: false },
+  { id: "b3", label: "Una escena que funcione solo con sonido (mute el dialogo y se entiende)", done: false },
   { id: "b4", label: "Tu primer piloto completo (NOVA / Don Moko)", done: false },
   { id: "b5", label: "Tu primera IP licenciable", done: false },
 ];
@@ -107,8 +107,10 @@ function migrateSession(s) {
 }
 
 // ---------- helpers / xp ----------
-const todayStr = () => new Date().toISOString().slice(0, 10);
-const yesterdayStr = () => new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+// fecha en hora LOCAL (toISOString es UTC: despues de las 21h en UTC-3 anotaba el dia siguiente y rompia la racha)
+const localDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const todayStr = () => localDateStr(new Date());
+const yesterdayStr = () => localDateStr(new Date(Date.now() - 864e5));
 const daysBetween = (a, b) => Math.round((new Date(a + "T00:00") - new Date(b + "T00:00")) / 864e5);
 const fmtTime = (ts) => new Date(ts).toTimeString().slice(0, 5);
 const phasesDone = (p) => PHASES.filter((x) => p.phases?.[x.id]).length;
@@ -128,7 +130,7 @@ const classIndex = (xp) => { let i = 0; CLASSES.forEach((c, k) => { if (xp >= c.
 
 // estado / vitality (drives zombie decay)
 function estadoFrom(streak) {
-  if (!streak.lastDate) return { label: "NUEVO", decay: 0, mood: "Hacé tu primera sesión", color: C.cyan };
+  if (!streak.lastDate) return { label: "NUEVO", decay: 0, mood: "Hace tu primera sesion", color: C.cyan };
   const idle = daysBetween(todayStr(), streak.lastDate);
   if (idle <= 0) {
     const c = streak.count;
@@ -136,11 +138,11 @@ function estadoFrom(streak) {
     if (c >= 3) return { label: "+2", decay: 0, mood: "Activo y fuerte", color: C.green };
     return { label: "+1", decay: 0, mood: "En marcha", color: C.green };
   }
-  if (idle === 1) return { label: "+0", decay: 0, mood: "Tibio — registrá hoy", color: C.cyan };
+  if (idle === 1) return { label: "+0", decay: 0, mood: "Tibio — registra hoy", color: C.cyan };
   if (idle === 2) return { label: "0", decay: 1, mood: "Cansado, palideciendo…", color: C.muted };
-  if (idle === 3) return { label: "-1", decay: 2, mood: "Zombificándose 🧟", color: C.zombie };
+  if (idle === 3) return { label: "-1", decay: 2, mood: "Zombificandose 🧟", color: C.zombie };
   if (idle === 4) return { label: "-2", decay: 2, mood: "Casi zombi…", color: C.zombie };
-  return { label: "DEAD", decay: 3, mood: "ZOMBI TOTAL 🧟 ¡revivilo con una sesión!", color: C.danger };
+  return { label: "DEAD", decay: 3, mood: "ZOMBI TOTAL 🧟 ¡revivilo con una sesion!", color: C.danger };
 }
 
 // ---------- wizard (imagen ilustrada por clase; decay = filtro zombie) ----------
@@ -199,12 +201,14 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   const [showPiece, setShowPiece] = useState(false);
   const [showSession, setShowSession] = useState(false);
   const [finishing, setFinishing] = useState(null);
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
+  const [celebrate, setCelebrate] = useState(null); // { n: sesiones de hoy, xp } al completar una sesion
   const [, setNow] = useState(Date.now());
 
   useEffect(() => {
     (async () => {
       try { const r = await window.storage.get(STORAGE_KEY); if (r && r.value) { const d = JSON.parse(r.value);
-        // migra campaña única vieja -> lista + principal
+        // migra campaña unica vieja -> lista + principal
         let campaigns = d.campaigns; let mainFilmId = d.mainFilmId;
         if (!campaigns) { campaigns = d.campaign ? [d.campaign] : []; mainFilmId = d.campaign ? d.campaign.filmId : null; }
         setState({ ...EMPTY, ...d, campaigns, mainFilmId, pieces: (d.pieces || []).map(migratePiece), practice: (d.practice || []).map(migrateSession), bosses: d.bosses?.length ? d.bosses : DEFAULT_BOSSES }); } }
@@ -213,10 +217,20 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   }, []);
   useEffect(() => { if (!state.activeTimer) return; const id = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(id); }, [state.activeTimer]);
 
+  const saveTimeout = useRef(null);
   const persist = useCallback(async (next) => {
     setState(next);
-    try { await window.storage.set(STORAGE_KEY, JSON.stringify(next)); setErr(null); }
-    catch (e) { setErr("No se pudo guardar. Reintentá."); }
+    setSaveStatus("saving");
+    clearTimeout(saveTimeout.current);
+    try {
+      await window.storage.set(STORAGE_KEY, JSON.stringify(next));
+      setErr(null);
+      setSaveStatus("saved");
+      saveTimeout.current = setTimeout(() => setSaveStatus("idle"), 2000); // el ✓ se apaga solo
+    } catch (e) {
+      setErr("No se pudo guardar. Reintenta.");
+      setSaveStatus("error");
+    }
   }, []);
 
   if (loading) return <div style={{ minHeight: "100vh", background: C.bg, color: C.muted, fontFamily: PX, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>CARGANDO…</div>;
@@ -229,9 +243,10 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   const donePieces = state.pieces.filter(isFinal).length;
   const pct = nxt ? Math.round(((xp - cls.min) / (nxt.min - cls.min)) * 100) : 100;
   const est = estadoFrom(state.streak);
+  const todaySessions = state.practice.filter((s) => s.date === todayStr() && s.film !== "tarea").length; // tareas no encienden estrellas
   const wkStartCur = mondayOf(todayStr());
   const wkSessCur = state.practice.filter((s) => s.date >= wkStartCur);
-  const wkFocusH = wkSessCur.reduce((a, s) => a + (s.minutes || 0), 0) / 60;
+  const wkFocusH = wkSessCur.filter((s) => s.film !== "tarea").reduce((a, s) => a + (s.minutes || 0), 0) / 60;
   const wkStudyH = wkSessCur.filter((s) => s.film === "study").reduce((a, s) => a + (s.minutes || 0), 0) / 60;
   const goalsMet = (wkFocusH >= WEEK_GOAL_H ? 1 : 0) + (wkStudyH >= STUDY_GOAL_H ? 1 : 0);
 
@@ -242,12 +257,17 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   };
   const addSession = (partial) => {
     const date = partial.date || todayStr();
-    const streak = bumpStreak(state.streak, date);
+    const isTarea = partial.film === "tarea"; // las tareas se trackean pero no dan XP, racha ni estrellas
+    const streak = isTarea ? state.streak : bumpStreak(state.streak, date);
     const eff = date === todayStr() ? streak.count : 1;
     const bonus = Math.min(Math.max(eff - 1, 0), 6);
-    const entry = { id: Date.now(), date, start: partial.start || "", end: partial.end || "", minutes: partial.minutes || 0, film: partial.film ?? null, phase: partial.phase ?? null, branch: partial.branch, intencion: partial.intencion || "", resultado: partial.resultado || "", xp: 5 + bonus };
+    const entry = { id: Date.now(), date, start: partial.start || "", end: partial.end || "", minutes: partial.minutes || 0, film: partial.film ?? null, phase: partial.phase ?? null, branch: partial.branch, intencion: partial.intencion || "", resultado: partial.resultado || "", xp: isTarea ? 0 : 5 + bonus };
     persist({ ...state, practice: [...state.practice, entry], streak, activeTimer: null });
     setFinishing(null); setShowSession(false);
+    if (!isTarea && date === todayStr()) { // festejo: solo sesiones de trabajo de hoy encienden estrellas
+      const n = state.practice.filter((s) => s.date === date && s.film !== "tarea").length + 1;
+      setCelebrate({ n, xp: entry.xp });
+    }
   };
   const startTimer = ({ film, phase, branch, note, duration }) => { persist({ ...state, activeTimer: { startTs: Date.now(), durationMin: duration, film, phase, branch, note } }); setShowSession(false); };
   const cancelTimer = () => persist({ ...state, activeTimer: null });
@@ -290,6 +310,27 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
     persist({ ...state, campaigns, mainFilmId });
   };
   const setMainCampaign = (filmId) => persist({ ...state, mainFilmId: filmId });
+  const downloadBackup = () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `ai-filmmaker-quest-backup-${todayStr()}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+  const restoreBackup = (file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const d = JSON.parse(reader.result);
+        if (!d || !Array.isArray(d.pieces) || !Array.isArray(d.practice)) throw new Error("formato");
+        if (!window.confirm(`Esto REEMPLAZA todos tus datos actuales por los del backup (${d.pieces.length} films, ${d.practice.length} sesiones). ¿Continuar?`)) return;
+        let campaigns = d.campaigns; let mainFilmId = d.mainFilmId;
+        if (!campaigns) { campaigns = d.campaign ? [d.campaign] : []; mainFilmId = d.campaign ? d.campaign.filmId : null; }
+        persist({ ...EMPTY, ...d, campaigns, mainFilmId, pieces: d.pieces.map(migratePiece), practice: d.practice.map(migrateSession), bosses: d.bosses?.length ? d.bosses : DEFAULT_BOSSES });
+      } catch (e) { alert("El archivo no es un backup valido de AI Filmmaker Quest."); }
+    };
+    reader.readAsText(file);
+  };
   const addNote = (text, filmId = null, title = "") => persist({ ...state, notes: [{ id: Date.now(), title, text, date: todayStr(), filmId, pinned: false }, ...(state.notes || [])] });
   const removeNote = (id) => persist({ ...state, notes: (state.notes || []).filter((n) => n.id !== id) });
   const editNote = (id, text, title = "") => persist({ ...state, notes: (state.notes || []).map((n) => n.id === id ? { ...n, text, title } : n) });
@@ -300,14 +341,14 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   const rmm = Math.max(0, Math.floor(remaining / 60000));
   const rss = Math.max(0, Math.floor((remaining % 60000) / 1000));
 
-  const TABS = [["clases", "CLASES"], ["panel", "SKILLS"], ["log", "BITÁCORA"], ["pieces", "PIEZAS"], ["logros", "NOTAS"], ["boss", "BOSSES"]];
+  const TABS = [["clases", "CLASES"], ["panel", "SKILLS"], ["log", "BITACORA"], ["pieces", "PIEZAS"], ["logros", "NOTAS"], ["boss", "BOSSES"]];
   const NAV = [
     ["clases", "Dashboard", "▤"], ["log", "Sesiones", "◷"], ["pieces", "Films", "▶"],
-    ["clases", "Clases", "★"], ["panel", "Skills", "✦"], ["log", "Bitácora", "▦"],
+    ["clases", "Clases", "★"], ["panel", "Skills", "✦"], ["log", "Bitacora", "▦"],
     ["pieces", "Piezas", "◧"], ["logros", "Notas", "▲"], ["boss", "Bosses", "☠"],
     ["tienda", "Tienda", "◆"], ["ajustes", "Ajustes", "⚙"],
   ];
-  const recent = [...state.practice].sort((a, b) => (b.date + (b.start || "")).localeCompare(a.date + (a.start || ""))).slice(0, 30);
+  const recent = state.practice.filter((s) => s.date === todayStr()).sort((a, b) => (b.start || "").localeCompare(a.start || "")); // solo las de hoy: foto completa del dia
 
   return (
     <div style={{ minHeight: "100vh", color: C.cream, fontFamily: MONO, backgroundImage: `linear-gradient(rgba(20,12,40,.55), rgba(20,12,40,.7)), url(${fondo})`, backgroundSize: "cover", backgroundPosition: "center", backgroundAttachment: "fixed" }}>
@@ -318,12 +359,16 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
         .scan::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.03) 0 2px,transparent 2px 4px);}
         @keyframes blink{50%{opacity:.25;}} .blink{animation:blink 1s steps(1) infinite;}
         @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+        @keyframes starpop{0%{transform:scale(0) rotate(-40deg);opacity:0}60%{transform:scale(1.6) rotate(8deg);opacity:1}100%{transform:scale(1) rotate(0)}}
+        @keyframes fadein{from{opacity:0}to{opacity:1}}
+        @keyframes risein{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @media (prefers-reduced-motion: reduce){.starnew{animation:none!important;}}
         .logo-slime{font-family:${PX};color:${C.green};line-height:1.35;letter-spacing:.5px;text-shadow:0 2px 0 ${C.ink},2px 0 0 ${C.ink},-2px 0 0 ${C.ink},0 -2px 0 ${C.ink},2px 2px 0 ${C.ink},-2px 2px 0 ${C.ink},3px 5px 0 ${C.magenta},0 6px 0 rgba(0,0,0,.4);}
         .cartoon-btn{border-radius:12px;transition:transform .08s,box-shadow .08s;}
         .cartoon-btn:active{transform:translateY(3px);}
         .navbtn{border-radius:10px;transition:background .12s,color .12s;}
         @media (prefers-reduced-motion: reduce){.blink,[style*=floaty]{animation:none;}}
-        /* ===== escritorio: contenedor centrado, más ancho, sin sidebar ===== */
+        /* ===== escritorio: contenedor centrado, mas ancho, sin sidebar ===== */
         .shell{display:block;max-width:1040px;margin:0 auto;padding:18px;}
         .herorow{display:block;}
         .contentrow{display:block;margin-top:18px;}
@@ -336,16 +381,24 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
         }
       `}</style>
 
+      {celebrate && <SessionCelebration n={celebrate.n} xp={celebrate.xp} streak={state.streak.count} onClose={() => setCelebrate(null)} />}
+
       <div className="shell">
         {/* ===== MAIN (sin sidebar; se navega por pestañas) ===== */}
         <main>
           {/* topbar: logo + gemas + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
             <span className="logo-slime" style={{ fontSize: 12, flex: 1, lineHeight: 1.3 }}>AI FILMMAKER<br/>QUEST</span>
+            {saveStatus !== "idle" && (
+              <span style={{ fontFamily: PX, fontSize: 7, padding: "6px 9px", borderRadius: 8, border: `2px solid ${saveStatus === "error" ? C.danger : C.line}`, color: saveStatus === "error" ? C.danger : saveStatus === "saved" ? C.green : C.muted, background: C.surface }}>
+                {saveStatus === "saving" ? "GUARDANDO…" : saveStatus === "saved" ? "✓ GUARDADO" : "⚠ SIN GUARDAR"}
+              </span>
+            )}
             <span style={{ fontSize: 15, color: C.muted }}>🔔</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: PX, fontSize: 9, color: C.gold, border: `3px solid ${C.ink}`, borderRadius: 10, background: C.surface, padding: "7px 11px", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}>◆ 0</span>
             <div title={userEmail || ""} style={{ width: 38, height: 38, border: `3px solid ${C.ink}`, borderRadius: 10, background: C.bgDeep, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}><PixelWizard tier={idx} decay={est.decay} size={30} /></div>
-            {onLogout && <button onClick={onLogout} title="Cerrar sesión" style={{ fontFamily: PX, fontSize: 8, color: C.muted, background: C.surface, border: `3px solid ${C.ink}`, borderRadius: 10, padding: "8px 10px", cursor: "pointer", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}>SALIR</button>}
+            <button onClick={() => setTab("ajustes")} title="Ajustes y backup" style={{ fontSize: 15, color: tab === "ajustes" ? C.gold : C.muted, background: C.surface, border: `3px solid ${C.ink}`, borderRadius: 10, padding: "6px 9px", cursor: "pointer", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}>⚙</button>
+            {onLogout && <button onClick={onLogout} title="Cerrar sesion" style={{ fontFamily: PX, fontSize: 8, color: C.muted, background: C.surface, border: `3px solid ${C.ink}`, borderRadius: 10, padding: "8px 10px", cursor: "pointer", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}>SALIR</button>}
           </div>
 
           {/* HERO ROW */}
@@ -386,24 +439,30 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flex: "2 1 340px" }}>
-              <Stat label="RACHA" value={`${state.streak.count}d`} sub={state.streak.count > 0 ? "DÍAS" : "HOY"} c={C.magenta} />
+              <Stat label="RACHA" value={`${state.streak.count}d`} sub={state.streak.count > 0 ? "DIAS" : "HOY"} c={C.magenta} />
               <Stat label="SESIONES" value={state.practice.length} sub="TOTALES" c={C.cyan} />
               <Stat label="GOALS" value={`${goalsMet}/2`} sub="CONSTANCIA" c={C.green} />
+            </div>
+            {/* estrellas del dia: 1 por sesion completada hoy, se resetean a diario */}
+            <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: PX, fontSize: 7, color: C.muted }}>HOY</span>
+              <DayStars n={todaySessions} size={16} />
+              {todaySessions >= 10 && <span style={{ fontFamily: PX, fontSize: 7, color: C.gold }}>¡DIA PERFECTO!</span>}
             </div>
           </div>
 
         {/* TIMER PANEL */}
         {at && (
           <div style={{ ...panel({ borderRadius: 0, borderColor: C.cyan }), padding: 16, marginTop: 10, textAlign: "center" }}>
-            <div style={{ fontFamily: PX, fontSize: 8, color: C.cyan }}>{at.film && at.film !== "study" ? `${state.pieces.find((p) => p.id === at.film)?.film || "FILM"} · ${PHASES.find((x) => x.id === at.phase)?.name || ""}` : `STUDY · ${BRANCHES.find((b) => b.id === at.branch)?.name || ""}`}</div>
+            <div style={{ fontFamily: PX, fontSize: 8, color: C.cyan }}>{at.film === "tarea" ? "🏠 TAREA" : at.film && at.film !== "study" ? `${state.pieces.find((p) => p.id === at.film)?.film || "FILM"} · ${PHASES.find((x) => x.id === at.phase)?.name || ""}` : `STUDY · ${BRANCHES.find((b) => b.id === at.branch)?.name || ""}`}</div>
             <div style={{ fontFamily: PX, fontSize: 38, color: remaining <= 0 ? C.green : C.cream, margin: "12px 0", textShadow: `0 0 12px ${C.cyan}55` }}>{String(rmm).padStart(2, "0")}:{String(rss).padStart(2, "0")}</div>
             {at.note && <div style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, marginBottom: 12, fontStyle: "italic" }}>"{at.note}"</div>}
-            {remaining <= 0 && <div style={{ fontFamily: PX, fontSize: 8, color: C.green, marginBottom: 12 }}>¡TIEMPO! Terminá para guardar.</div>}
+            {remaining <= 0 && <div style={{ fontFamily: PX, fontSize: 8, color: C.green, marginBottom: 12 }}>¡TIEMPO! Termina para guardar.</div>}
             <div style={{ display: "flex", gap: 8 }}>
               <Btn c={C.green} onClick={finishTimer}>TERMINAR</Btn>
               <button onClick={cancelTimer} style={{ flex: 1, padding: 13, fontSize: 10, background: "none", border: `2px solid ${C.line}`, color: C.muted, cursor: "pointer" }}>DESCARTAR</button>
             </div>
-            <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginTop: 10 }}>Mantené esta pantalla abierta: el reloj no corre de fondo si cerrás la app.</p>
+            <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginTop: 10 }}>Podes cerrar la app tranquilo: el timer sigue corriendo y lo encontras como corresponde al volver.</p>
           </div>
         )}
 
@@ -441,7 +500,7 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
                 const lvlCol = cur ? "#8A5A0A" : C.cyan;
                 return (
                   <div key={k} style={{ ...box9(cur), position: "relative", padding: 26, aspectRatio: "1 / 1", overflow: "hidden", filter: `drop-shadow(0 5px 6px rgba(0,0,0,.5))${un ? "" : " brightness(.82)"}`, display: "flex", flexDirection: "column" }}>
-                    {cur && <span style={{ position: "absolute", top: 20, right: 20, fontFamily: PX, fontSize: 6.5, color: C.cream, background: "#C13B78", padding: "2px 4px", borderRadius: 4 }}>AQUÍ</span>}
+                    {cur && <span style={{ position: "absolute", top: 20, right: 20, fontFamily: PX, fontSize: 6.5, color: C.cream, background: "#C13B78", padding: "2px 4px", borderRadius: 4 }}>AQUI</span>}
                     <div style={{ fontFamily: PX, fontSize: 7, color: lvlCol, lineHeight: 1.3, textAlign: "center" }}>LVL {k + 1} · {c.min} XP</div>
                     <div style={{ fontFamily: PX, fontSize: c.name.length > 22 ? 7.5 : 9, color: nameCol, lineHeight: 1.35, margin: "6px 0 4px", textAlign: "center" }}>{c.name}</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "center", flex: 1, minHeight: 0, textAlign: "center" }}>
@@ -449,7 +508,7 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
                       <div style={{ fontFamily: MONO, fontSize: 9, color: blurbCol, lineHeight: 1.25, overflow: "hidden" }}>{c.blurb}</div>
                     </div>
                     <div style={{ marginTop: 6 }}>
-                      {cur ? <div style={{ background: C.gold, color: C.ink, fontFamily: PX, fontSize: 7, textAlign: "center", padding: "6px", borderRadius: 6, border: `2px solid ${C.ink}` }}>ESTÁS ACÁ</div>
+                      {cur ? <div style={{ background: C.gold, color: C.ink, fontFamily: PX, fontSize: 7, textAlign: "center", padding: "6px", borderRadius: 6, border: `2px solid ${C.ink}` }}>ESTAS ACA</div>
                         : un ? <div style={{ border: `2px solid ${C.green}`, color: C.green, fontFamily: PX, fontSize: 7, textAlign: "center", padding: "5px", borderRadius: 6 }}>✓ DESBLOQUEADA</div>
                           : <div style={{ fontFamily: MONO, fontSize: 10, color: C.muted, textAlign: "center" }}>🔒 Bloqueada</div>}
                     </div>
@@ -488,7 +547,7 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
                   </div>
                 );
               })}
-              <p style={{ fontFamily: MONO, fontSize: 11.5, color: C.muted, marginTop: 14, lineHeight: 1.5 }}>Cada disciplina sube al completar su fase en un film, o al estudiarla directamente en una sesión de Study.</p>
+              <p style={{ fontFamily: MONO, fontSize: 11.5, color: C.muted, marginTop: 14, lineHeight: 1.5 }}>Cada disciplina sube al completar su fase en un film, o al estudiarla directamente en una sesion de Study.</p>
             </div>
           )}
 
@@ -498,7 +557,7 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
 
           {tab === "pieces" && (
             <div>
-              {state.pieces.length === 0 && <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>Sin films todavía. Tocá + FILM para arrancar un proyecto y avanzá sus fases con el tiempo. Cada fase suma XP; al completarlas marcás FINAL y los minutos van al metraje.</p>}
+              {state.pieces.length === 0 && <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>Sin films todavia. Toca + FILM para arrancar un proyecto y avanza sus fases con el tiempo. Cada fase suma XP; al completarlas marcas FINAL y los minutos van al metraje.</p>}
               {state.pieces.map((p) => {
                 const phaseMin = {};
                 state.practice.forEach((s) => { if (s.film === p.id && s.phase) phaseMin[s.phase] = (phaseMin[s.phase] || 0) + (s.minutes || 0); });
@@ -515,10 +574,29 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
             <NotesTab notes={state.notes || []} films={state.pieces} onAdd={addNote} onRemove={removeNote} onEdit={editNote} onTogglePin={togglePinNote} />
           )}
 
-          {["tienda", "ajustes"].includes(tab) && (
+          {tab === "tienda" && (
             <div style={{ ...panel({ borderRadius: 0 }), padding: 24, textAlign: "center" }}>
-              <div style={{ fontFamily: PX, fontSize: 11, color: C.gold, marginBottom: 12 }}>{tab === "tienda" ? "TIENDA" : "AJUSTES"}</div>
-              <div style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>Próximamente. Todavía no le dimos función a esta sección — la definimos más adelante.</div>
+              <div style={{ fontFamily: PX, fontSize: 11, color: C.gold, marginBottom: 12 }}>TIENDA</div>
+              <div style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>Proximamente. Todavia no le dimos funcion a esta seccion — la definimos mas adelante.</div>
+            </div>
+          )}
+
+          {tab === "ajustes" && (
+            <div style={{ ...panel({ borderRadius: 0 }), padding: 16 }}>
+              <div style={{ fontFamily: PX, fontSize: 9, color: C.gold, marginBottom: 14 }}>💾 BACKUP DE TUS DATOS</div>
+              <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.55, marginBottom: 14 }}>
+                Descarga una copia completa de tu progreso (films, sesiones, notas, campañas, XP) como archivo JSON. Guardala donde quieras; si algun dia hace falta, la restauras desde aca.
+              </p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={downloadBackup} style={{ flex: "1 1 200px", padding: 13, fontFamily: PX, fontSize: 9, color: C.ink, background: C.green, border: `3px solid ${C.ink}`, borderRadius: 10, cursor: "pointer", fontWeight: 700, boxShadow: "0 4px 0 rgba(0,0,0,.4)" }}>⬇ DESCARGAR BACKUP</button>
+                <label style={{ flex: "1 1 200px", padding: 13, fontFamily: PX, fontSize: 9, color: C.muted, background: "transparent", border: `3px solid ${C.line}`, borderRadius: 10, cursor: "pointer", textAlign: "center" }}>
+                  ⬆ RESTAURAR BACKUP
+                  <input type="file" accept="application/json,.json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) restoreBackup(f); e.target.value = ""; }} />
+                </label>
+              </div>
+              <p style={{ fontFamily: MONO, fontSize: 11, color: C.muted, lineHeight: 1.5, marginTop: 12 }}>
+                ⚠ Restaurar reemplaza TODO lo que tengas ahora por lo del archivo (te pide confirmacion antes).
+              </p>
             </div>
           )}
             </div>
@@ -532,6 +610,49 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
 }
 
 // ---------- subcomponents ----------
+// 10 estrellas del dia (apagadas → doradas por cada sesion completada hoy)
+function DayStars({ n, size = 16, newIndex = -1 }) {
+  return (
+    <div style={{ display: "flex", gap: size * 0.25 }}>
+      {Array.from({ length: 10 }).map((_, i) => {
+        const on = i < n;
+        return (
+          <span key={i} className={i === newIndex ? "starnew" : ""} style={{
+            fontSize: size, lineHeight: 1,
+            color: on ? C.gold : "#241940",
+            textShadow: on ? `0 0 ${size * 0.5}px ${C.gold}AA` : "none",
+            WebkitTextStroke: on ? `1px ${C.ink}` : `1px #3A2B60`,
+            animation: i === newIndex ? "starpop .55s cubic-bezier(.2,1.6,.4,1) both" : "none",
+            animationDelay: i === newIndex ? ".25s" : "0s",
+          }}>★</span>
+        );
+      })}
+    </div>
+  );
+}
+
+// festejo al completar una sesion: la estrella nueva se enciende con pop
+function SessionCelebration({ n, xp, streak, onClose }) {
+  const perfect = n >= 10;
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(16,9,32,.82)", animation: "fadein .2s ease-out", cursor: "pointer" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...panel({ borderColor: perfect ? C.gold : C.frame }), animation: "risein .35s cubic-bezier(.2,1.4,.4,1) both", padding: "26px 30px", textAlign: "center", maxWidth: 420, cursor: "default", boxShadow: perfect ? `0 0 0 3px ${C.ink}, 0 0 40px ${C.gold}66, 0 8px 0 rgba(0,0,0,.35)` : undefined }}>
+        <div style={{ fontFamily: PX, fontSize: 12, color: perfect ? C.gold : C.green, marginBottom: 6, textShadow: `2px 2px 0 ${C.ink}` }}>
+          {perfect ? "¡DIA PERFECTO!" : "¡SESION COMPLETADA!"}
+        </div>
+        <div style={{ fontFamily: MONO, fontSize: 13, color: C.muted, marginBottom: 18 }}>
+          {perfect ? "10 de 10. Una bestia absoluta." : `Sesion ${n} de hoy${streak > 1 ? ` · racha ${streak}d 🔥` : ""}`}
+        </div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+          <DayStars n={n} size={26} newIndex={n - 1} />
+        </div>
+        <div style={{ fontFamily: PX, fontSize: 10, color: C.cyan, marginBottom: 20 }}>+{xp} XP</div>
+        <button onClick={onClose} style={{ padding: "12px 26px", fontFamily: PX, fontSize: 9, color: C.ink, background: perfect ? C.gold : C.green, border: `3px solid ${C.ink}`, borderRadius: 10, cursor: "pointer", fontWeight: 700, boxShadow: "0 4px 0 rgba(0,0,0,.4)" }}>SEGUIR</button>
+      </div>
+    </div>
+  );
+}
+
 function Stat({ label, value, sub, c }) {
   return (
     <div style={{ ...panel({ borderRadius: 0 }), flex: 1, padding: "9px 8px", textAlign: "center" }}>
@@ -562,8 +683,9 @@ function SessionForm({ onStart, onManual, onCancel, streak, films }) {
   const [mmin, setMmin] = useState("45");
   const bonus = Math.min(Math.max(streak, 0), 6);
   const isStudy = film === "study";
-  const branch = isStudy ? skill : (PHASES.find((x) => x.id === phase)?.branch || "story");
-  const payload = () => ({ film: isStudy ? "study" : film, phase: isStudy ? null : phase, branch });
+  const isTarea = film === "tarea";
+  const branch = isTarea ? null : isStudy ? skill : (PHASES.find((x) => x.id === phase)?.branch || "story");
+  const payload = () => ({ film: isStudy || isTarea ? film : film, phase: isStudy || isTarea ? null : phase, branch });
 
   return (
     <FormShell accent={C.cyan}>
@@ -572,25 +694,27 @@ function SessionForm({ onStart, onManual, onCancel, streak, films }) {
         <button onClick={() => setManual(true)} style={{ flex: 1, padding: 9, fontSize: 8, border: `2px solid ${C.cyan}`, background: manual ? C.cyan : "transparent", color: manual ? C.bg : C.cyan, cursor: "pointer" }}>REGISTRO MANUAL</button>
       </div>
 
-      <Field label="¿EN QUÉ TRABAJÁS?">
+      <Field label="¿EN QUE TRABAJAS?">
         <select style={inputStyle} value={film} onChange={(e) => setFilm(e.target.value)}>
           {films.map((f) => <option key={f.id} value={f.id} style={{ background: C.surface }}>{f.film}</option>)}
           <option value="study" style={{ background: C.surface }}>📚 Study (estudiar / referencia)</option>
+          <option value="tarea" style={{ background: C.surface }}>🏠 Tarea (domestica / otra actividad)</option>
         </select>
       </Field>
 
-      {isStudy ? (
+      {isStudy && (
         <Field label="SKILL A ESTUDIAR"><select style={inputStyle} value={skill} onChange={(e) => setSkill(e.target.value)}>{BRANCHES.map((b) => <option key={b.id} value={b.id} style={{ background: C.surface }}>{b.name}</option>)}</select></Field>
-      ) : (
+      )}
+      {!isStudy && !isTarea && (
         <Field label="FASE DEL FILM"><select style={inputStyle} value={phase} onChange={(e) => setPhase(e.target.value)}>{PHASES.map((x) => <option key={x.id} value={x.id} style={{ background: C.surface }}>{x.name}</option>)}</select></Field>
       )}
 
-      <Field label="FOCO / INTENCIÓN"><input style={inputStyle} value={note} onChange={(e) => setNote(e.target.value)} placeholder={isStudy ? "analizar el montaje de Whiplash" : "cortar la escena del corredor"} /></Field>
+      <Field label={isTarea ? "¿QUE TAREA?" : "FOCO / INTENCION"}><input style={inputStyle} value={note} onChange={(e) => setNote(e.target.value)} placeholder={isTarea ? "limpiar la casa, tramites, cocinar" : isStudy ? "analizar el montaje de Whiplash" : "cortar la escena del corredor"} /></Field>
 
       {!manual ? (
         <>
-          <Field label="DURACIÓN (MIN)"><input style={inputStyle} type="number" min="5" step="5" value={duration} onChange={(e) => setDuration(e.target.value)} /></Field>
-          <p style={{ fontFamily: MONO, fontSize: 11, color: C.muted, margin: "0 0 11px" }}>Arranca el timer. Al terminar sumás +{5 + bonus} XP {bonus > 0 ? `(base 5 + ${bonus} racha 🔥)` : ""} a {BRANCHES.find((b) => b.id === branch)?.name}.</p>
+          <Field label="DURACION (MIN)"><input style={inputStyle} type="number" min="5" step="5" value={duration} onChange={(e) => setDuration(e.target.value)} /></Field>
+          <p style={{ fontFamily: MONO, fontSize: 11, color: C.muted, margin: "0 0 11px" }}>{isTarea ? "Arranca el timer. Las tareas se registran para ver donde va tu tiempo: no dan XP ni estrellas." : `Arranca el timer. Al terminar sumas +${5 + bonus} XP ${bonus > 0 ? `(base 5 + ${bonus} racha 🔥)` : ""} a ${BRANCHES.find((b) => b.id === branch)?.name}.`}</p>
           <div style={{ display: "flex", gap: 8 }}>
             <Btn c={C.cyan} onClick={() => onStart({ ...payload(), note: note.trim(), duration: Math.max(5, parseInt(duration) || 45) })}>▶ INICIAR FOCO</Btn>
             <button onClick={onCancel} style={{ flex: 1, padding: 13, fontSize: 10, background: "none", border: `2px solid ${C.line}`, color: C.muted, cursor: "pointer" }}>CANCELAR</button>
@@ -617,8 +741,8 @@ function FinishForm({ finishing, onSave, onSkip }) {
   const [res, setRes] = useState("");
   return (
     <FormShell accent={C.green}>
-      <div style={{ fontFamily: PX, fontSize: 8, color: C.green, marginBottom: 10 }}>SESIÓN HECHA · {finishing.minutes} MIN</div>
-      <Field label="¿QUÉ LOGRASTE? (RESULTADO)"><input style={inputStyle} value={res} onChange={(e) => setRes(e.target.value)} placeholder="quedó el ritmo, falta sonido" autoFocus /></Field>
+      <div style={{ fontFamily: PX, fontSize: 8, color: C.green, marginBottom: 10 }}>SESION HECHA · {finishing.minutes} MIN</div>
+      <Field label="¿QUE LOGRASTE? (RESULTADO)"><input style={inputStyle} value={res} onChange={(e) => setRes(e.target.value)} placeholder="quedo el ritmo, falta sonido" autoFocus /></Field>
       <div style={{ display: "flex", gap: 8 }}>
         <Btn c={C.green} onClick={() => onSave(res.trim())}>GUARDAR</Btn>
         <button onClick={onSkip} style={{ flex: 1, padding: 13, fontSize: 10, background: "none", border: `2px solid ${C.line}`, color: C.muted, cursor: "pointer" }}>SIN NOTA</button>
@@ -627,8 +751,8 @@ function FinishForm({ finishing, onSave, onSkip }) {
   );
 }
 
-// ---------- evaluación: heatmap + semana + ratio + export ----------
-const isoDate = (d) => d.toISOString().slice(0, 10);
+// ---------- evaluacion: heatmap + semana + ratio + export ----------
+const isoDate = (d) => localDateStr(d); // hora local (el heatmap y las semanas comparan contra fechas de sesion locales)
 const addDays = (dateStr, n) => { const d = new Date(dateStr + "T00:00"); d.setDate(d.getDate() + n); return isoDate(d); };
 const weekdayMon = (dateStr) => (new Date(dateStr + "T00:00").getDay() + 6) % 7; // 0=Lun..6=Dom
 function mondayOf(dateStr) {
@@ -661,7 +785,7 @@ function Heatmap({ minutesByDay, weeks = 13 }) {
         ))}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 8, fontFamily: PX, fontSize: 6, color: C.muted }}>
-        MENOS {[C.surface2, "#5A4A1E", "#9A7322", "#D29A2C", C.gold].map((c, i) => <span key={i} style={{ width: 9, height: 9, background: c, display: "inline-block" }} />)} MÁS
+        MENOS {[C.surface2, "#5A4A1E", "#9A7322", "#D29A2C", C.gold].map((c, i) => <span key={i} style={{ width: 9, height: 9, background: c, display: "inline-block" }} />)} MAS
       </div>
     </div>
   );
@@ -672,8 +796,8 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
   const [copied, setCopied] = useState(false);
   const [minInput, setMinInput] = useState("");
 
-  const minutesByDay = {};
-  state.practice.forEach((s) => { minutesByDay[s.date] = (minutesByDay[s.date] || 0) + (s.minutes || 0); });
+  const minutesByDay = {}; // heatmap de TRABAJO: las tareas no cuentan aca
+  state.practice.forEach((s) => { if (s.film !== "tarea") minutesByDay[s.date] = (minutesByDay[s.date] || 0) + (s.minutes || 0); });
 
   const today = isoDate(new Date());
   const wkStart = mondayOf(today);
@@ -682,7 +806,8 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
 
   // ---- stats de una lista de sesiones (una semana) ----
   const statsFor = (sessions) => {
-    const focusMin = sessions.reduce((a, s) => a + (s.minutes || 0), 0);
+    const tareaMin = sessions.filter((s) => s.film === "tarea").reduce((a, s) => a + (s.minutes || 0), 0);
+    const focusMin = sessions.filter((s) => s.film !== "tarea").reduce((a, s) => a + (s.minutes || 0), 0);
     const studyMin = sessions.filter((s) => s.film === "study").reduce((a, s) => a + (s.minutes || 0), 0);
     const prodMin = focusMin - studyMin;
     const days = new Set(sessions.map((s) => s.date)).size;
@@ -696,7 +821,7 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
     });
     const study = {};
     sessions.filter((s) => s.film === "study").forEach((s) => { study[s.branch] = (study[s.branch] || 0) + (s.minutes || 0); });
-    return { focusMin, studyMin, prodMin, days, films, study };
+    return { focusMin, studyMin, prodMin, tareaMin, days, films, study };
   };
 
   const wkSessions = state.practice.filter((s) => s.date >= wkStart);
@@ -713,16 +838,16 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
     return { name: p.film, minutes: p.minutes, h, ratio: p.minutes > 0 ? (h / p.minutes).toFixed(1) : null };
   });
 
-  const snapshot = () => ({ weekStart: wkStart, closedAt: new Date().toISOString(), focusMin: w.focusMin, studyMin: w.studyMin, prodMin: w.prodMin, days: w.days, minAdv, ratio: weekRatio, films: Object.values(w.films), study: w.study, sessions: wkSessions.length });
+  const snapshot = () => ({ weekStart: wkStart, closedAt: new Date().toISOString(), focusMin: w.focusMin, studyMin: w.studyMin, prodMin: w.prodMin, tareaMin: w.tareaMin, days: w.days, minAdv, ratio: weekRatio, films: Object.values(w.films), study: w.study, sessions: wkSessions.length });
 
   const buildReport = () => {
     const L = [];
     L.push(`REPORTE AI FILMMAKER QUEST — ${today}`);
-    L.push(`Racha: ${state.streak.count} días · XP total: ${totalXP(state)}`);
+    L.push(`Racha: ${state.streak.count} dias · XP total: ${totalXP(state)}`);
     L.push("");
     L.push(`== SEMANA EN CURSO (desde ${wkStart}) ==`);
     L.push(`Horas foco: ${focusH.toFixed(1)}h / meta ${WEEK_GOAL_H}h (${goalDiff >= 0 ? "+" : ""}${goalDiff.toFixed(1)}h)`);
-    L.push(`Producción: ${(w.prodMin / 60).toFixed(1)}h · Study: ${(w.studyMin / 60).toFixed(1)}h · Días activos: ${w.days}/7`);
+    L.push(`Produccion: ${(w.prodMin / 60).toFixed(1)}h · Study: ${(w.studyMin / 60).toFixed(1)}h · Dias activos: ${w.days}/7`);
     L.push(`Minutos avanzados (cargados): ${minAdv} · Ratio semana (modo): ${weekRatio ? weekRatio + " h/min" : "semana base (sin metraje nuevo)"}`);
     L.push("Films de la semana:");
     Object.values(w.films).forEach((f) => { L.push(`  ${f.name} — ${(f.total / 60).toFixed(1)}h: ` + PHASES.filter((ph) => f.phases[ph.id]).map((ph) => `${ph.name} ${(f.phases[ph.id] / 60).toFixed(1)}h`).join(", ")); });
@@ -731,25 +856,25 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
     L.push("Sesiones de la semana:");
     wkSessions.slice().reverse().forEach((s) => {
       const ctx = s.film && s.film !== "study" ? `${state.pieces.find((p) => p.id === s.film)?.film || "Film"} / ${PHASES.find((x) => x.id === s.phase)?.name || "?"}` : `Study: ${BRANCHES.find((b) => b.id === s.branch)?.name || "?"}`;
-      L.push(`  ${s.date} ${s.start || ""} · ${ctx} · ${s.minutes || 0}min → ${s.intencion || "(sin intención)"}${s.resultado ? ` ✓ ${s.resultado}` : ""}`);
+      L.push(`  ${s.date} ${s.start || ""} · ${ctx} · ${s.minutes || 0}min → ${s.intencion || "(sin intencion)"}${s.resultado ? ` ✓ ${s.resultado}` : ""}`);
     });
     L.push("");
     L.push("== COSTO REAL (films terminados) ==");
-    finishedFilms.length ? finishedFilms.forEach((f) => L.push(`  ${f.name}: ${f.h.toFixed(1)}h / ${f.minutes}min = ${f.ratio || "—"} h/min`)) : L.push("  Aún no cerraste ningún film.");
+    finishedFilms.length ? finishedFilms.forEach((f) => L.push(`  ${f.name}: ${f.h.toFixed(1)}h / ${f.minutes}min = ${f.ratio || "—"} h/min`)) : L.push("  Aun no cerraste ningun film.");
     if (weeks.length) {
       L.push("");
       L.push("== SEMANAS CERRADAS (para comparar) ==");
-      weeks.slice(0, 6).forEach((k) => L.push(`  ${k.weekStart}: ${(k.focusMin / 60).toFixed(1)}h foco · prod ${(k.prodMin / 60).toFixed(1)}h · study ${(k.studyMin / 60).toFixed(1)}h · avanzó ${k.minAdv}min · ratio ${k.ratio || "—"}`));
+      weeks.slice(0, 6).forEach((k) => L.push(`  ${k.weekStart}: ${(k.focusMin / 60).toFixed(1)}h foco · prod ${(k.prodMin / 60).toFixed(1)}h · study ${(k.studyMin / 60).toFixed(1)}h · avanzo ${k.minAdv}min · ratio ${k.ratio || "—"}`));
     }
     return L.join("\n");
   };
   const onExport = () => { const r = buildReport(); setReport(r); setCopied(false); try { navigator.clipboard?.writeText(r).then(() => setCopied(true)).catch(() => { }); } catch (e) { } };
 
   if (state.practice.length === 0 && weeks.length === 0)
-    return <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>Sin sesiones todavía. Tocá + SESIÓN para arrancar tu primer bloque de foco. Acá vas a ver el mapa de constancia, el resumen de la semana, y vas a poder cerrar la semana y exportarla para evaluarla juntos.</p>;
+    return <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>Sin sesiones todavia. Toca + SESION para arrancar tu primer bloque de foco. Aca vas a ver el mapa de constancia, el resumen de la semana, y vas a poder cerrar la semana y exportarla para evaluarla juntos.</p>;
 
   const goalColor = goalPct >= 100 ? C.green : goalPct >= 60 ? C.gold : C.magenta;
-  const prevWeek = weeks[0]; // más reciente cerrada, para comparar
+  const prevWeek = weeks[0]; // mas reciente cerrada, para comparar
 
   return (
     <div>
@@ -771,9 +896,10 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
           {prevWeek && <> · vs. semana pasada: {(focusH - prevWeek.focusMin / 60) >= 0 ? "+" : ""}{(focusH - prevWeek.focusMin / 60).toFixed(1)}h</>}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <MiniStat v={(w.prodMin / 60).toFixed(1) + "h"} l="PRODUCCIÓN" />
+          <MiniStat v={(w.prodMin / 60).toFixed(1) + "h"} l="PRODUCCION" />
           <MiniStat v={(w.studyMin / 60).toFixed(1) + "h"} l="STUDY" />
-          <MiniStat v={`${w.days}/7`} l="DÍAS" />
+          <MiniStat v={(w.tareaMin / 60).toFixed(1) + "h"} l="TAREAS" />
+          <MiniStat v={`${w.days}/7`} l="DIAS" />
         </div>
       </div>
 
@@ -787,7 +913,7 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
               <div key={ph.id} style={{ display: "flex", justifyContent: "space-between", fontFamily: MONO, fontSize: 11, color: C.muted, padding: "2px 0 2px 10px" }}><span>{ph.name}</span><span>{(f.phases[ph.id] / 60).toFixed(1)}h</span></div>
             ))}
           </div>
-        )) : <p style={{ fontFamily: MONO, fontSize: 11.5, color: C.muted }}>Ningún film trabajado esta semana todavía.</p>}
+        )) : <p style={{ fontFamily: MONO, fontSize: 11.5, color: C.muted }}>Ningun film trabajado esta semana todavia.</p>}
       </div>
 
       {/* study de la semana */}
@@ -808,15 +934,15 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
         </div>
         <div style={{ background: C.bg, border: `2px solid ${C.line}`, padding: 10, marginBottom: 8 }}>
           <div style={{ fontFamily: PX, fontSize: 7, color: C.cyan }}>RATIO SEMANA (modo)</div>
-          <div style={{ fontFamily: MONO, fontSize: 12.5, color: C.cream, marginTop: 5 }}>{weekRatio ? `${weekRatio} h/min — semana de producción` : "Semana base (guion/diseño): sin metraje nuevo"}</div>
+          <div style={{ fontFamily: MONO, fontSize: 12.5, color: C.cream, marginTop: 5 }}>{weekRatio ? `${weekRatio} h/min — semana de produccion` : "Semana base (guion/diseño): sin metraje nuevo"}</div>
         </div>
         <div style={{ background: C.bg, border: `2px solid ${C.line}`, padding: 10 }}>
           <div style={{ fontFamily: PX, fontSize: 7, color: C.magenta }}>COSTO REAL (films terminados)</div>
           {finishedFilms.length ? finishedFilms.map((f, i) => (
             <div key={i} style={{ display: "flex", justifyContent: "space-between", fontFamily: MONO, fontSize: 12, color: C.cream, marginTop: 5 }}><span>{f.name}</span><span style={{ color: C.magenta }}>{f.ratio || "—"} h/min</span></div>
-          )) : <div style={{ fontFamily: MONO, fontSize: 11.5, color: C.muted, marginTop: 5 }}>Aún no cerraste ningún film.</div>}
+          )) : <div style={{ fontFamily: MONO, fontSize: 11.5, color: C.muted, marginTop: 5 }}>Aun no cerraste ningun film.</div>}
         </div>
-        <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginTop: 10 }}>El ratio semanal dice en qué modo estuviste (producir vs. base), no tu eficiencia. El costo real por film terminado sí mide rendimiento.</p>
+        <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginTop: 10 }}>El ratio semanal dice en que modo estuviste (producir vs. base), no tu eficiencia. El costo real por film terminado si mide rendimiento.</p>
       </div>
 
       {/* cerrar semana */}
@@ -835,7 +961,7 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
                   <span>SEM {k.weekStart}</span>
                   <span style={{ color: C.gold }}>{(k.focusMin / 60).toFixed(1)}h{dh !== null ? ` (${dh >= 0 ? "+" : ""}${dh.toFixed(1)})` : ""}</span>
                 </div>
-                <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, marginTop: 4 }}>prod {(k.prodMin / 60).toFixed(1)}h · study {(k.studyMin / 60).toFixed(1)}h · avanzó {k.minAdv}min · ratio {k.ratio || "—"}</div>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, marginTop: 4 }}>prod {(k.prodMin / 60).toFixed(1)}h · study {(k.studyMin / 60).toFixed(1)}h · avanzo {k.minAdv}min · ratio {k.ratio || "—"}</div>
               </div>
             );
           })}
@@ -846,23 +972,25 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
       <button onClick={onExport} style={{ width: "100%", padding: 13, fontSize: 9, marginBottom: 10, border: `3px solid ${C.green}`, background: "transparent", color: C.green, cursor: "pointer" }}>⤓ EXPORTAR PARA EVALUAR</button>
       {report && (
         <div style={{ ...panel({ borderRadius: 0, borderColor: C.green }), padding: 12, marginBottom: 10 }}>
-          <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, marginBottom: 8 }}>{copied ? "✓ Copiado. " : ""}Copiá este texto y pegámelo en el chat para que analicemos los patrones.</div>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, marginBottom: 8 }}>{copied ? "✓ Copiado. " : ""}Copia este texto y pegamelo en el chat para que analicemos los patrones.</div>
           <textarea readOnly value={report} onFocus={(e) => e.target.select()} style={{ width: "100%", minHeight: 160, background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: 10, fontSize: 11, fontFamily: MONO, borderRadius: 0, resize: "vertical" }} />
         </div>
       )}
 
       {/* list */}
-      <div style={{ fontFamily: PX, fontSize: 8, color: C.muted, margin: "4px 0 10px" }}>SESIONES RECIENTES</div>
+      <div style={{ fontFamily: PX, fontSize: 8, color: C.muted, margin: "4px 0 10px" }}>SESIONES DE HOY</div>
+      {recent.length === 0 && <p style={{ fontFamily: MONO, fontSize: 12, color: C.muted }}>Sin sesiones registradas hoy todavia.</p>}
       {recent.map((s) => {
-        const film = s.film && s.film !== "study" ? state.pieces.find((p) => p.id === s.film) : null;
+        const isTarea = s.film === "tarea";
+        const film = s.film && s.film !== "study" && !isTarea ? state.pieces.find((p) => p.id === s.film) : null;
         const phaseName = PHASES.find((x) => x.id === s.phase)?.name;
         const skillName = BRANCHES.find((b) => b.id === s.branch)?.name;
-        const label = film ? `${film.film} · ${phaseName || ""}` : (s.film === "study" ? `📚 Study · ${skillName || ""}` : (skillName || ""));
+        const label = isTarea ? "🏠 Tarea" : film ? `${film.film} · ${phaseName || ""}` : (s.film === "study" ? `📚 Study · ${skillName || ""}` : (skillName || ""));
         return (
           <div key={s.id} style={{ ...panel({ borderRadius: 0 }), padding: 10, marginBottom: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontFamily: PX, fontSize: 7, color: C.cyan }}>
               <span>{s.date}{s.start ? ` · ${s.start}${s.end ? `–${s.end}` : ""}` : ""}</span>
-              <span style={{ color: C.muted }}>{s.minutes ? `${s.minutes}min` : ""} · +{s.xp}xp</span>
+              <span style={{ color: C.muted }}>{s.minutes ? `${s.minutes}min` : ""}{isTarea ? "" : ` · +${s.xp}xp`}</span>
             </div>
             <div style={{ fontFamily: MONO, fontSize: 12.5, color: C.cream, marginTop: 6 }}>{label}</div>
             {s.intencion && <div style={{ fontFamily: MONO, fontSize: 11.5, color: C.muted, marginTop: 3 }}>→ {s.intencion}</div>}
@@ -888,10 +1016,10 @@ function ProjectForm({ onAdd, onCancel, existing }) {
   const dup = existing.some((f) => f.toLowerCase() === film.trim().toLowerCase());
   return (
     <FormShell accent={C.gold}>
-      <Field label="NOMBRE DEL FILM / PROYECTO"><input style={inputStyle} value={film} onChange={(e) => setFilm(e.target.value)} placeholder="NOVA — Después (piloto)" autoFocus /></Field>
-      <Field label="MINUTOS OBJETIVO (DURACIÓN FINAL)"><input style={inputStyle} type="number" min="0" step="0.5" value={minutes} onChange={(e) => setMinutes(e.target.value)} /></Field>
-      <p style={{ fontFamily: MONO, fontSize: 11, color: C.muted, margin: "0 0 11px" }}>Creás el film una vez y vas marcando sus {PHASES.length} fases con el tiempo. Cada fase suma +{PHASE_XP} XP; al marcar FINAL cae +{FINAL_BONUS} y +10 por minuto.</p>
-      {dup && <p style={{ fontFamily: MONO, fontSize: 11, color: C.danger, margin: "0 0 11px" }}>Ya tenés un film con ese nombre. Avanzá sus fases en la tarjeta existente, o usá otro nombre.</p>}
+      <Field label="NOMBRE DEL FILM / PROYECTO"><input style={inputStyle} value={film} onChange={(e) => setFilm(e.target.value)} placeholder="NOVA — Despues (piloto)" autoFocus /></Field>
+      <Field label="MINUTOS OBJETIVO (DURACION FINAL)"><input style={inputStyle} type="number" min="0" step="0.5" value={minutes} onChange={(e) => setMinutes(e.target.value)} /></Field>
+      <p style={{ fontFamily: MONO, fontSize: 11, color: C.muted, margin: "0 0 11px" }}>Creas el film una vez y vas marcando sus {PHASES.length} fases con el tiempo. Cada fase suma +{PHASE_XP} XP; al marcar FINAL cae +{FINAL_BONUS} y +10 por minuto.</p>
+      {dup && <p style={{ fontFamily: MONO, fontSize: 11, color: C.danger, margin: "0 0 11px" }}>Ya tenes un film con ese nombre. Avanza sus fases en la tarjeta existente, o usa otro nombre.</p>}
       <div style={{ display: "flex", gap: 8 }}>
         <Btn c={C.gold} onClick={() => { if (film.trim() && !dup) onAdd({ film: film.trim(), minutes: Math.max(0, parseFloat(minutes) || 0) }); }}>CREAR FILM</Btn>
         <button onClick={onCancel} style={{ flex: 1, padding: 13, fontSize: 10, background: "none", border: `2px solid ${C.line}`, color: C.muted, cursor: "pointer" }}>CANCELAR</button>
@@ -904,7 +1032,7 @@ function BossTab({ state, onActivate, onDeactivate, onSetMain, onTogglePhase }) 
   // ----- goals de constancia (semana en curso) -----
   const wkStart = mondayOf(todayStr());
   const wk = state.practice.filter((s) => s.date >= wkStart);
-  const focusH = wk.reduce((a, s) => a + (s.minutes || 0), 0) / 60;
+  const focusH = wk.filter((s) => s.film !== "tarea").reduce((a, s) => a + (s.minutes || 0), 0) / 60;
   const studyH = wk.filter((s) => s.film === "study").reduce((a, s) => a + (s.minutes || 0), 0) / 60;
 
   const activeFilms = state.pieces.filter((p) => !isFinal(p));
@@ -933,7 +1061,7 @@ function BossTab({ state, onActivate, onDeactivate, onSetMain, onTogglePhase }) 
           <Campaign film={mainFilm} start={mainCamp.start} sessions={state.practice} onClear={() => onDeactivate(mainFilm.id)} />
         ) : (
           <p style={{ fontFamily: MONO, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-            {activeFilms.length ? "Activá un film abajo para ponerlo como boss principal: despliega sus etapas con presupuesto de horas y fechas de cierre." : "Creá un film en PIEZAS para poder activar una campaña."}
+            {activeFilms.length ? "Activa un film abajo para ponerlo como boss principal: despliega sus etapas con presupuesto de horas y fechas de cierre." : "Crea un film en PIEZAS para poder activar una campaña."}
           </p>
         )}
       </div>
@@ -942,7 +1070,7 @@ function BossTab({ state, onActivate, onDeactivate, onSetMain, onTogglePhase }) 
       {secondaries.length > 0 && (
         <div style={{ ...panel({ borderRadius: 0 }), padding: 12, marginBottom: 12 }}>
           <div style={{ fontFamily: PX, fontSize: 8, color: C.cyan, marginBottom: 4 }}>🎬 EN PARALELO</div>
-          <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginBottom: 12 }}>Films activos sin deadline. Registrás horas y ves progreso; cuando quieras, hacé principal a uno.</p>
+          <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginBottom: 12 }}>Films activos sin deadline. Registras horas y ves progreso; cuando quieras, hace principal a uno.</p>
           {secondaries.map((c) => {
             const film = state.pieces.find((p) => p.id === c.filmId);
             if (!film) return null;
@@ -951,7 +1079,7 @@ function BossTab({ state, onActivate, onDeactivate, onSetMain, onTogglePhase }) 
         </div>
       )}
 
-      {/* ACTIVAR MÁS FILMS */}
+      {/* ACTIVAR MAS FILMS */}
       {notActivated.length > 0 && (
         <div style={{ ...panel({ borderRadius: 0 }), padding: 12 }}>
           <div style={{ fontFamily: PX, fontSize: 8, color: C.muted, marginBottom: 12 }}>+ ACTIVAR FILM</div>
@@ -980,13 +1108,16 @@ function GoalBar({ label, cur, goal, color }) {
   );
 }
 
-// bloc de notas / recordatorios (general o por film; con pin y edición)
+// bloc de notas / recordatorios (general o por film; con pin y edicion)
 function NotesTab({ notes, films, onAdd, onRemove, onEdit, onTogglePin }) {
-  const [title, setTitle] = useState("");
-  const [text, setText] = useState("");
+  // el borrador persiste en localStorage: cambiar de pestaña o recargar no pierde lo escrito
+  const [title, setTitle] = useState(() => { try { return localStorage.getItem("aifq-draft-title") || ""; } catch { return ""; } });
+  const [text, setText] = useState(() => { try { return localStorage.getItem("aifq-draft-text") || ""; } catch { return ""; } });
+  useEffect(() => { try { localStorage.setItem("aifq-draft-title", title); } catch {} }, [title]);
+  useEffect(() => { try { localStorage.setItem("aifq-draft-text", text); } catch {} }, [text]);
   const [scope, setScope] = useState("global"); // "global" | filmId
   const [filter, setFilter] = useState("all");   // "all" | "global" | filmId
-  const [editing, setEditing] = useState(null);   // id en edición
+  const [editing, setEditing] = useState(null);   // id en edicion
   const [editTitle, setEditTitle] = useState("");
   const [editText, setEditText] = useState("");
 
@@ -1008,11 +1139,11 @@ function NotesTab({ notes, films, onAdd, onRemove, onEdit, onTogglePin }) {
       {/* NUEVA NOTA */}
       <div style={{ ...panel({ borderRadius: 0 }), padding: 12, marginBottom: 12 }}>
         <div style={{ fontFamily: PX, fontSize: 8, color: C.gold, marginBottom: 10 }}>📝 NUEVA NOTA</div>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título (opcional)" style={titleStyle} />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Titulo (opcional)" style={titleStyle} />
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Ej: estructura del guion (setup → conflicto → clímax → resolución), checklist de rodaje, ideas sueltas…"
+          placeholder="Ej: estructura del guion (setup → conflicto → climax → resolucion), checklist de rodaje, ideas sueltas…"
           rows={3}
           style={{ width: "100%", background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: "10px 11px", fontSize: 13.5, fontFamily: MONO, borderRadius: 8, resize: "vertical", lineHeight: 1.5 }}
         />
@@ -1039,7 +1170,7 @@ function NotesTab({ notes, films, onAdd, onRemove, onEdit, onTogglePin }) {
       )}
 
       {shown.length === 0 ? (
-        <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5, padding: "4px 2px" }}>{notes.length === 0 ? "Todavía no hay notas. Anotá recordatorios, estructuras, ideas — se quedan acá hasta que las borres." : "No hay notas en este filtro."}</p>
+        <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5, padding: "4px 2px" }}>{notes.length === 0 ? "Todavia no hay notas. Anota recordatorios, estructuras, ideas — se quedan aca hasta que las borres." : "No hay notas en este filtro."}</p>
       ) : (
         shown.map((n) => (
           <div key={n.id} style={{ ...panel({ borderRadius: 0, borderColor: n.pinned ? C.gold : C.frame }), padding: 12, marginBottom: 8 }}>
@@ -1055,7 +1186,7 @@ function NotesTab({ notes, films, onAdd, onRemove, onEdit, onTogglePin }) {
 
             {editing === n.id ? (
               <div>
-                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Título (opcional)" style={{ ...titleStyle, border: `2px solid ${C.cyan}` }} />
+                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Titulo (opcional)" style={{ ...titleStyle, border: `2px solid ${C.cyan}` }} />
                 <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} autoFocus style={{ width: "100%", background: C.bg, border: `2px solid ${C.cyan}`, color: C.cream, padding: "10px 11px", fontSize: 13.5, fontFamily: MONO, borderRadius: 8, resize: "vertical", lineHeight: 1.5 }} />
                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 8 }}>
                   <button onClick={() => setEditing(null)} style={{ padding: "7px 12px", fontFamily: PX, fontSize: 7, color: C.muted, background: "none", border: `2px solid ${C.line}`, borderRadius: 6, cursor: "pointer" }}>CANCELAR</button>
@@ -1164,7 +1295,7 @@ function Campaign({ film, start, sessions, onClear }) {
           </div>
         );
       })}
-      <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginTop: 6 }}>Deadlines a {HOURS_PER_DAY}h/día desde que activaste. Etapa cerrada = todas sus fases marcadas en PIEZAS. Si te atrasás, no hay castigo: lo miramos en el reporte.</p>
+      <p style={{ fontFamily: MONO, fontSize: 10.5, color: C.muted, marginTop: 6 }}>Deadlines a {HOURS_PER_DAY}h/dia desde que activaste. Etapa cerrada = todas sus fases marcadas en PIEZAS. Si te atrasas, no hay castigo: lo miramos en el reporte.</p>
     </div>
   );
 }
@@ -1204,7 +1335,7 @@ function ProjectCard({ p, phaseMin = {}, onTogglePhase, onMinutes, onRemove }) {
         })}
       </div>
 
-      {/* FINAL — botón de terminado */}
+      {/* FINAL — boton de terminado */}
       <button onClick={() => onTogglePhase(FINAL_PHASE)} style={{
         width: "100%", marginTop: 8, padding: "11px", cursor: "pointer", fontFamily: PX, fontSize: 9, letterSpacing: 1,
         display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
