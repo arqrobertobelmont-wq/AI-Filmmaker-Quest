@@ -63,6 +63,26 @@ const PHASES = [
   { id: "post", name: "Post", branch: "post" },
   { id: "review", name: "Review", branch: "edit" },
 ];
+// ---------- proceso: los 15 pasos del ciclo (SOP), cada uno pertenece a una fase ----------
+// todos los pasos de una fase ✓ -> la fase se marca sola en PIEZAS/BOSSES
+const STEPS = [
+  { id: "s01", n: "01", name: "Idea", phase: "idea" },
+  { id: "s02", n: "02", name: "Logline", phase: "idea" },
+  { id: "s03", n: "03", name: "Beat sheet", phase: "writing" },
+  { id: "s04", n: "04", name: "Escaleta", phase: "writing" },
+  { id: "s05", n: "05", name: "Guion", phase: "writing" },
+  { id: "s06", n: "06", name: "Audio + Musica (en paralelo con el guion)", phase: "writing" },
+  { id: "s07", n: "07", name: "Director's vision", phase: "visual" },
+  { id: "s08", n: "08", name: "Character Bible (1 pagina)", phase: "visual" },
+  { id: "s09", n: "09", name: "World Bible (1 pagina)", phase: "visual" },
+  { id: "s10", n: "10", name: "Storyboard / previs", phase: "storyboard" },
+  { id: "s11", n: "11", name: "Shot list + Prompts", phase: "shots" },
+  { id: "s12", n: "12", name: "Produccion (GENS)", phase: "shots" },
+  { id: "s13", n: "13", name: "Edicion", phase: "edit" },
+  { id: "s14", n: "14", name: "Post", phase: "post" },
+  { id: "s15", n: "15", name: "Review", phase: "review" },
+];
+
 const FINAL_PHASE = "final"; // checkbox aparte en Piezas: marcar = film terminado
 const PHASE_XP = 10;         // por fase de trabajo completada
 const FINAL_BONUS = 50;      // al marcar Final
@@ -292,6 +312,17 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
     });
     persist({ ...state, pieces, streak });
   };
+  const toggleStep = (pieceId, stepId) => {
+    const step = STEPS.find((s) => s.id === stepId); if (!step) return;
+    const pieces = state.pieces.map((p) => {
+      if (p.id !== pieceId) return p;
+      const steps = { ...(p.steps || {}) };
+      if (steps[stepId]) delete steps[stepId]; else steps[stepId] = todayStr(); // guarda fecha para medir ritmo semanal
+      const phaseDone = STEPS.filter((s) => s.phase === step.phase).every((s) => steps[s.id]);
+      return { ...p, steps, phases: { ...p.phases, [step.phase]: phaseDone } };
+    });
+    persist({ ...state, pieces });
+  };
   const setProjectMinutes = (id, minutes) => persist({ ...state, pieces: state.pieces.map((p) => p.id === id ? { ...p, minutes } : p) });
   const setWeekMinutes = (weekStart, min) => persist({ ...state, weekMinutes: { ...state.weekMinutes, [weekStart]: min } });
   const closeWeek = (snap) => {
@@ -341,10 +372,10 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   const rmm = Math.max(0, Math.floor(remaining / 60000));
   const rss = Math.max(0, Math.floor((remaining % 60000) / 1000));
 
-  const TABS = [["clases", "CLASES"], ["panel", "SKILLS"], ["log", "BITACORA"], ["pieces", "PIEZAS"], ["logros", "NOTAS"], ["boss", "BOSSES"]];
+  const TABS = [["clases", "CLASES"], ["panel", "PROCESO"], ["log", "BITACORA"], ["pieces", "PIEZAS"], ["logros", "NOTAS"], ["boss", "BOSSES"]];
   const NAV = [
     ["clases", "Dashboard", "▤"], ["log", "Sesiones", "◷"], ["pieces", "Films", "▶"],
-    ["clases", "Clases", "★"], ["panel", "Skills", "✦"], ["log", "Bitacora", "▦"],
+    ["clases", "Clases", "★"], ["panel", "Proceso", "✦"], ["log", "Bitacora", "▦"],
     ["pieces", "Piezas", "◧"], ["logros", "Notas", "▲"], ["boss", "Bosses", "☠"],
     ["tienda", "Tienda", "◆"], ["ajustes", "Ajustes", "⚙"],
   ];
@@ -532,23 +563,7 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
               </div>}
 
           {tab === "panel" && (
-            <div>
-              {BRANCHES.map((b) => {
-                const bxp = branchXP(state, b.id), lvl = branchLevel(bxp), cap = BRANCH_THRESHOLDS[Math.min(lvl + 1, 5)], floor = BRANCH_THRESHOLDS[lvl];
-                const pp = lvl >= 5 ? 100 : Math.round(((bxp - floor) / (cap - floor)) * 100);
-                const ph = PHASES.find((x) => x.branch === b.id);
-                return (
-                  <div key={b.id} style={{ marginBottom: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
-                      <span style={{ fontFamily: MONO, fontSize: 12.5, color: C.cream }}>{b.name} {ph && <span style={{ color: C.muted, fontFamily: PX, fontSize: 7 }}>· {ph.name}</span>}</span>
-                      <span style={{ fontFamily: PX, fontSize: 8, color: C.cyan }}>Lv{lvl}</span>
-                    </div>
-                    <SegBar pct={pp} color={C.gold} blocks={14} />
-                  </div>
-                );
-              })}
-              <p style={{ fontFamily: MONO, fontSize: 11.5, color: C.muted, marginTop: 14, lineHeight: 1.5 }}>Cada disciplina sube al completar su fase en un film, o al estudiarla directamente en una sesion de Study.</p>
-            </div>
+            <ProcesoTab state={state} onToggleStep={toggleStep} />
           )}
 
           {tab === "log" && (
@@ -676,11 +691,11 @@ function SessionForm({ onStart, onManual, onCancel, streak, films }) {
   const [phase, setPhase] = useState(PHASES[0].id);
   const [skill, setSkill] = useState(BRANCHES[0].id);
   const [note, setNote] = useState("");
-  const [duration, setDuration] = useState("45");
+  const [duration, setDuration] = useState("30");
   const [manual, setManual] = useState(false);
   const [date, setDate] = useState(todayStr());
   const [start, setStart] = useState(new Date().toTimeString().slice(0, 5));
-  const [mmin, setMmin] = useState("45");
+  const [mmin, setMmin] = useState("30");
   const bonus = Math.min(Math.max(streak, 0), 6);
   const isStudy = film === "study";
   const isTarea = film === "tarea";
@@ -716,7 +731,7 @@ function SessionForm({ onStart, onManual, onCancel, streak, films }) {
           <Field label="DURACION (MIN)"><input style={inputStyle} type="number" min="5" step="5" value={duration} onChange={(e) => setDuration(e.target.value)} /></Field>
           <p style={{ fontFamily: MONO, fontSize: 11, color: C.muted, margin: "0 0 11px" }}>{isTarea ? "Arranca el timer. Las tareas se registran para ver donde va tu tiempo: no dan XP ni estrellas." : `Arranca el timer. Al terminar sumas +${5 + bonus} XP ${bonus > 0 ? `(base 5 + ${bonus} racha 🔥)` : ""} a ${BRANCHES.find((b) => b.id === branch)?.name}.`}</p>
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn c={C.cyan} onClick={() => onStart({ ...payload(), note: note.trim(), duration: Math.max(5, parseInt(duration) || 45) })}>▶ INICIAR FOCO</Btn>
+            <Btn c={C.cyan} onClick={() => onStart({ ...payload(), note: note.trim(), duration: Math.max(5, parseInt(duration) || 30) })}>▶ INICIAR FOCO</Btn>
             <button onClick={onCancel} style={{ flex: 1, padding: 13, fontSize: 10, background: "none", border: `2px solid ${C.line}`, color: C.muted, cursor: "pointer" }}>CANCELAR</button>
           </div>
         </>
@@ -1028,6 +1043,72 @@ function ProjectForm({ onAdd, onCancel, existing }) {
   );
 }
 
+// PROCESO: los 15 pasos del ciclo para un film — la vista de "¿que sigue ahora?"
+function ProcesoTab({ state, onToggleStep }) {
+  const films = state.pieces.filter((p) => !isFinal(p));
+  const [sel, setSel] = useState(null);
+  const piece = films.find((p) => p.id === sel) || films.find((p) => p.id === state.mainFilmId) || films[0];
+
+  if (!piece) return (
+    <div style={{ ...panel({ borderRadius: 0 }), padding: 24, textAlign: "center" }}>
+      <div style={{ fontFamily: PX, fontSize: 10, color: C.gold, marginBottom: 12 }}>PROCESO</div>
+      <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>Crea un film en PIEZAS y aca vas a tener sus 15 pasos, del logline al review.</p>
+    </div>
+  );
+
+  const steps = piece.steps || {};
+  const done = STEPS.filter((s) => steps[s.id]).length;
+  const next = STEPS.find((s) => !steps[s.id]);
+  const wkStart = mondayOf(todayStr());
+  const wkDone = STEPS.filter((s) => steps[s.id] && steps[s.id] >= wkStart).length;
+
+  return (
+    <div>
+      {/* header: film + progreso del ciclo */}
+      <div style={{ ...panel({ borderRadius: 0, borderColor: C.gold }), padding: 14, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          <div style={{ fontFamily: PX, fontSize: 8, color: C.gold }}>⚙ EL CICLO</div>
+          {films.length > 1 && (
+            <select value={piece.id} onChange={(e) => setSel(Number(e.target.value))} style={{ marginLeft: "auto", background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: "7px 10px", fontSize: 12, fontFamily: MONO, borderRadius: 8 }}>
+              {films.map((f) => <option key={f.id} value={f.id}>{f.id === state.mainFilmId ? "🐉 " : ""}{f.film}</option>)}
+            </select>
+          )}
+        </div>
+        <div style={{ fontFamily: MONO, fontSize: 15, color: C.cream, fontWeight: 700, marginBottom: 4 }}>{piece.film}</div>
+        <div style={{ fontFamily: PX, fontSize: 7.5, color: C.muted, marginBottom: 8 }}>
+          {done === 15 ? "CICLO COMPLETO — marca FINAL en PIEZAS" : `PASO ${done + 1} DE 15`} · ESTA SEMANA: {wkDone} {wkDone === 1 ? "PASO" : "PASOS"}
+        </div>
+        <SegBar pct={Math.round((done / 15) * 100)} color={C.gold} blocks={15} />
+        {next && (
+          <div style={{ marginTop: 12, background: C.bg, border: `2px solid ${C.cyan}`, borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontFamily: PX, fontSize: 7, color: C.cyan, flexShrink: 0 }}>→ SIGUIENTE</span>
+            <span style={{ fontFamily: MONO, fontSize: 13, color: C.cream }}>{next.n} · {next.name}</span>
+          </div>
+        )}
+      </div>
+
+      {/* los 15 pasos */}
+      <div style={{ ...panel({ borderRadius: 0 }), padding: 12 }}>
+        {STEPS.map((st) => {
+          const on = !!steps[st.id];
+          const isNext = next && st.id === next.id;
+          const phName = PHASES.find((x) => x.id === st.phase)?.name;
+          return (
+            <button key={st.id} onClick={() => onToggleStep(piece.id, st.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", marginBottom: 4, cursor: "pointer", textAlign: "left", border: `2px solid ${isNext ? C.cyan : on ? C.line : "transparent"}`, borderRadius: 8, background: on ? "rgba(95,209,110,.07)" : isNext ? "rgba(63,217,217,.08)" : "transparent" }}>
+              <span style={{ width: 15, height: 15, flexShrink: 0, border: `2px solid ${on ? C.green : C.muted}`, background: on ? C.green : "transparent", color: C.bg, fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 4 }}>{on ? "✓" : ""}</span>
+              <span style={{ fontFamily: PX, fontSize: 8, color: on ? C.green : isNext ? C.cyan : C.muted, flexShrink: 0 }}>{st.n}</span>
+              <span style={{ flex: 1, fontFamily: MONO, fontSize: 13, color: on ? C.muted : C.cream, textDecoration: on ? "line-through" : "none", textDecorationColor: `${C.muted}88` }}>{st.name}</span>
+              <span style={{ fontFamily: PX, fontSize: 6, color: C.muted, flexShrink: 0 }}>{phName}</span>
+              {on && <span style={{ fontFamily: PX, fontSize: 6, color: C.muted, flexShrink: 0 }}>{steps[st.id].slice(5)}</span>}
+            </button>
+          );
+        })}
+        <p style={{ fontFamily: MONO, fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>Al completar todos los pasos de una fase, la fase se marca sola en PIEZAS y BOSSES (y suma su XP).</p>
+      </div>
+    </div>
+  );
+}
+
 function BossTab({ state, onActivate, onDeactivate, onSetMain, onTogglePhase }) {
   // ----- goals de constancia (semana en curso) -----
   const wkStart = mondayOf(todayStr());
@@ -1219,7 +1300,7 @@ function CampaignLite({ film, sessions, onMakeMain, onClear, onTogglePhase }) {
   return (
     <div style={{ background: C.bg, border: `2px solid ${C.line}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
       <div style={{ fontFamily: MONO, fontSize: 13, color: C.cream, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{film.film}</div>
-      <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, margin: "3px 0 8px" }}>{doneH.toFixed(1)} / {budgetTotal}h · {nPhases}/{PHASES.length} fases</div>
+      <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, margin: "3px 0 8px" }}>{doneH.toFixed(1)} / {budgetTotal}h · {nPhases}/{PHASES.length} fases{(() => { const c = cycleOf(film); return c ? ` · CICLO ${c.days}d` : ""; })()}</div>
       <SegBar pct={pct} color={C.cyan} blocks={14} />
 
       {/* fases con checkbox + horas */}
@@ -1241,6 +1322,28 @@ function CampaignLite({ film, sessions, onMakeMain, onClear, onTogglePhase }) {
         <button onClick={onMakeMain} style={{ flex: 1, padding: "7px", fontFamily: PX, fontSize: 7, color: C.bg, background: C.gold, border: "none", borderRadius: 6, cursor: "pointer" }}>★ HACER PRINCIPAL</button>
         <button onClick={onClear} style={{ padding: "7px 10px", fontFamily: PX, fontSize: 7, color: C.muted, background: "none", border: `2px solid ${C.line}`, borderRadius: 6, cursor: "pointer" }}>QUITAR</button>
       </div>
+    </div>
+  );
+}
+
+// resumen "cuanto me lleva": horas por etapa + total + ciclo en dias (fechas de los 15 pasos)
+function cycleOf(p) {
+  const dates = Object.values(p.steps || {}).sort();
+  return dates.length ? { days: daysBetween(dates[dates.length - 1], dates[0]) + 1, n: dates.length } : null;
+}
+function StageSummary({ p, phaseMin }) {
+  const SHORT = { dev: "DEV", prepro: "PREPRO", prod: "PROD", post: "POST" };
+  const totalH = Object.values(phaseMin).reduce((a, m) => a + m, 0) / 60;
+  const cycle = cycleOf(p);
+  const chip = { fontFamily: PX, fontSize: 6.5, background: C.bg, border: `2px solid ${C.line}`, borderRadius: 6, padding: "4px 7px" };
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+      {STAGES.map((st) => {
+        const h = st.phases.reduce((a, ph) => a + (phaseMin[ph] || 0), 0) / 60;
+        return <span key={st.id} style={{ ...chip, color: h > 0 ? C.cream : C.muted }}>{SHORT[st.id]} <span style={{ color: h > 0 ? C.gold : C.muted }}>{h.toFixed(1)}h</span></span>;
+      })}
+      <span style={{ ...chip, color: C.cyan }}>TOTAL {totalH.toFixed(1)}h</span>
+      {cycle && <span style={{ ...chip, color: C.magenta }}>CICLO {cycle.days}d · {cycle.n}/15</span>}
     </div>
   );
 }
@@ -1269,7 +1372,7 @@ function Campaign({ film, start, sessions, onClear }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: MONO, fontSize: 14, color: C.cream, fontWeight: 700 }}>{film.film}</div>
-          <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginTop: 4 }}>{totalDoneH.toFixed(1)} / {budgetTotal}h · {film.minutes} min</div>
+          <div style={{ fontFamily: PX, fontSize: 7, color: C.muted, marginTop: 4 }}>{totalDoneH.toFixed(1)} / {budgetTotal}h · {film.minutes} min{(() => { const c = cycleOf(film); return c ? ` · CICLO ${c.days}d · ${c.n}/15` : ""; })()}</div>
         </div>
         <button onClick={onClear} style={{ fontFamily: PX, fontSize: 7, color: C.muted, background: "none", border: `2px solid ${C.line}`, padding: "5px 7px", cursor: "pointer" }}>CAMBIAR</button>
       </div>
@@ -1318,6 +1421,9 @@ function ProjectCard({ p, phaseMin = {}, onTogglePhase, onMinutes, onRemove }) {
       </div>
 
       <div style={{ margin: "10px 0" }}><SegBar pct={pct} color={final ? C.gold : C.cyan} blocks={PHASES.length} /></div>
+
+      {/* cuanto me lleva: horas por etapa + ciclo */}
+      <div style={{ marginBottom: 10 }}><StageSummary p={p} phaseMin={phaseMin} /></div>
 
       {/* fases de trabajo */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
