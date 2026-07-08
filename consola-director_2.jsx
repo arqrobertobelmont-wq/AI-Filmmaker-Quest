@@ -432,6 +432,25 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
             {onLogout && <button onClick={onLogout} title="Cerrar sesion" style={{ fontFamily: PX, fontSize: 8, color: C.muted, background: C.surface, border: `3px solid ${C.ink}`, borderRadius: 10, padding: "8px 10px", cursor: "pointer", boxShadow: `0 3px 0 rgba(0,0,0,.35)` }}>SALIR</button>}
           </div>
 
+          {/* CONTINUAR: un toque = timer corriendo sobre el siguiente paso del boss principal */}
+          {!at && !finishing && (() => {
+            const btn = (label, onClick, c = C.gold) => (
+              <button className="cartoon-btn" onClick={onClick} style={{ width: "100%", padding: "16px 14px", marginBottom: 12, cursor: "pointer", fontFamily: PX, fontSize: 10, lineHeight: 1.5, color: C.ink, background: c, border: `3px solid ${C.ink}`, borderRadius: 12, fontWeight: 700, boxShadow: `0 5px 0 rgba(0,0,0,.4), 0 0 18px ${c}44`, textAlign: "center" }}>{label}</button>
+            );
+            const mainPiece = state.pieces.find((p) => p.id === state.mainFilmId && !isFinal(p));
+            if (mainPiece) {
+              const next = STEPS.find((s) => !(mainPiece.steps || {})[s.id]);
+              if (next) return btn(
+                <>▶ CONTINUAR: {mainPiece.film.toUpperCase()} — {next.n} {next.name} · 30 MIN</>,
+                () => startTimer({ film: mainPiece.id, phase: next.phase, branch: PHASES.find((x) => x.id === next.phase)?.branch || "story", note: `${next.n} ${next.name}`, duration: 30 }),
+                C.green
+              );
+              return btn(<>★ CICLO COMPLETO: {mainPiece.film.toUpperCase()} — MARCA FINAL EN PIEZAS</>, () => setTab("pieces"));
+            }
+            if (state.pieces.some((p) => !isFinal(p))) return btn("🐉 ELEGI TU BOSS PRINCIPAL EN BOSSES", () => setTab("boss"));
+            return btn("+ CREA TU PRIMER FILM PARA ARRANCAR", () => { setShowPiece(true); setShowSession(false); });
+          })()}
+
           {/* HERO ROW */}
           <div className="herorow">
             <div style={{ ...panel({ borderRadius: 0, borderColor: est.decay >= 2 ? C.zombie : C.frame }), position: "relative", padding: 16, display: "flex", gap: 16, alignItems: "center" }}>
