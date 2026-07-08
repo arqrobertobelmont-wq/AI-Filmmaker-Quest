@@ -293,7 +293,8 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   const cancelTimer = () => persist({ ...state, activeTimer: null });
   const finishTimer = () => {
     const at = state.activeTimer; if (!at) return;
-    const m = Math.min(at.durationMin, Math.max(1, Math.round((Date.now() - at.startTs) / 60000)));
+    const elapsed = Math.max(1, Math.round((Date.now() - at.startTs) / 60000));
+    const m = at.durationMin ? Math.min(at.durationMin, elapsed) : elapsed; // tarea: cronometro abierto, sin tope
     setFinishing({ film: at.film, phase: at.phase, branch: at.branch, intencion: at.note, minutes: m, start: fmtTime(at.startTs), end: fmtTime(Date.now()) });
     persist({ ...state, activeTimer: null });
   };
@@ -368,9 +369,11 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   const togglePinNote = (id) => persist({ ...state, notes: (state.notes || []).map((n) => n.id === id ? { ...n, pinned: !n.pinned } : n) });
 
   const at = state.activeTimer;
-  const remaining = at ? at.startTs + at.durationMin * 60000 - Date.now() : 0;
-  const rmm = Math.max(0, Math.floor(remaining / 60000));
-  const rss = Math.max(0, Math.floor((remaining % 60000) / 1000));
+  const isUpTimer = !!at && at.durationMin == null; // tarea: cronometro que cuenta hacia arriba
+  const remaining = at && !isUpTimer ? at.startTs + at.durationMin * 60000 - Date.now() : 0;
+  const shownMs = isUpTimer ? Math.max(0, Date.now() - at.startTs) : Math.max(0, remaining);
+  const rmm = Math.floor(shownMs / 60000);
+  const rss = Math.floor((shownMs % 60000) / 1000);
 
   const TABS = [["clases", "CLASES"], ["panel", "PROCESO"], ["log", "BITACORA"], ["pieces", "PIEZAS"], ["logros", "NOTAS"], ["boss", "BOSSES"]];
   const NAV = [
@@ -397,6 +400,10 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
         .logo-slime{font-family:${PX};color:${C.green};line-height:1.35;letter-spacing:.5px;text-shadow:0 2px 0 ${C.ink},2px 0 0 ${C.ink},-2px 0 0 ${C.ink},0 -2px 0 ${C.ink},2px 2px 0 ${C.ink},-2px 2px 0 ${C.ink},3px 5px 0 ${C.magenta},0 6px 0 rgba(0,0,0,.4);}
         .cartoon-btn{border-radius:12px;transition:transform .08s,box-shadow .08s;}
         .cartoon-btn:active{transform:translateY(3px);}
+        .mainbtn{background:${C.surface};color:${C.cream};border:3px solid ${C.ink};border-radius:12px;box-shadow:0 4px 0 rgba(0,0,0,.4);transition:background .12s,color .12s,transform .08s;}
+        .mainbtn:hover{background:${C.magenta};color:${C.ink};}
+        .mainbtn:active{transform:translateY(3px);}
+        .mainbtn.on{background:${C.magenta};color:${C.ink};}
         .navbtn{border-radius:10px;transition:background .12s,color .12s;}
         @media (prefers-reduced-motion: reduce){.blink,[style*=floaty]{animation:none;}}
         /* ===== escritorio: contenedor centrado, mas ancho, sin sidebar ===== */
@@ -434,22 +441,26 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
 
           {/* CONTINUAR: un toque = timer corriendo sobre el siguiente paso del boss principal */}
           {!at && !finishing && (() => {
-            const btn = (label, onClick, c = C.gold) => (
-              <button className="cartoon-btn" onClick={onClick} style={{ width: "100%", padding: "16px 14px", marginBottom: 12, cursor: "pointer", fontFamily: PX, fontSize: 10, lineHeight: 1.5, color: C.ink, background: c, border: `3px solid ${C.ink}`, borderRadius: 12, fontWeight: 700, boxShadow: `0 5px 0 rgba(0,0,0,.4), 0 0 18px ${c}44`, textAlign: "center" }}>{label}</button>
+            const btn = (label, onClick) => (
+              <button className="mainbtn" onClick={onClick} style={{ width: "100%", padding: "16px 14px", marginBottom: 12, cursor: "pointer", fontFamily: PX, fontSize: 10, lineHeight: 1.5, fontWeight: 700, textAlign: "center" }}>{label}</button>
             );
             const mainPiece = state.pieces.find((p) => p.id === state.mainFilmId && !isFinal(p));
             if (mainPiece) {
               const next = STEPS.find((s) => !(mainPiece.steps || {})[s.id]);
               if (next) return btn(
                 <>▶ CONTINUAR: {mainPiece.film.toUpperCase()} — {next.n} {next.name} · 30 MIN</>,
-                () => startTimer({ film: mainPiece.id, phase: next.phase, branch: PHASES.find((x) => x.id === next.phase)?.branch || "story", note: `${next.n} ${next.name}`, duration: 30 }),
-                C.green
+                () => startTimer({ film: mainPiece.id, phase: next.phase, branch: PHASES.find((x) => x.id === next.phase)?.branch || "story", note: `${next.n} ${next.name}`, duration: 30 })
               );
               return btn(<>★ CICLO COMPLETO: {mainPiece.film.toUpperCase()} — MARCA FINAL EN PIEZAS</>, () => setTab("pieces"));
             }
             if (state.pieces.some((p) => !isFinal(p))) return btn("🐉 ELEGI TU BOSS PRINCIPAL EN BOSSES", () => setTab("boss"));
             return btn("+ CREA TU PRIMER FILM PARA ARRANCAR", () => { setShowPiece(true); setShowSession(false); });
           })()}
+
+          {/* tarea sin friccion: cronometro libre, se nombra al terminar */}
+          {!at && !finishing && (
+            <button className="mainbtn" onClick={() => startTimer({ film: "tarea", phase: null, branch: null, note: "", duration: null })} style={{ width: "100%", padding: "12px 14px", marginBottom: 12, cursor: "pointer", fontFamily: PX, fontSize: 8.5 }}>🏠 ARRANCAR TAREA</button>
+          )}
 
           {/* HERO ROW */}
           <div className="herorow">
@@ -505,9 +516,10 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
         {at && (
           <div style={{ ...panel({ borderRadius: 0, borderColor: C.cyan }), padding: 16, marginTop: 10, textAlign: "center" }}>
             <div style={{ fontFamily: PX, fontSize: 8, color: C.cyan }}>{at.film === "tarea" ? "🏠 TAREA" : at.film && at.film !== "study" ? `${state.pieces.find((p) => p.id === at.film)?.film || "FILM"} · ${PHASES.find((x) => x.id === at.phase)?.name || ""}` : `STUDY · ${BRANCHES.find((b) => b.id === at.branch)?.name || ""}`}</div>
-            <div style={{ fontFamily: PX, fontSize: 38, color: remaining <= 0 ? C.green : C.cream, margin: "12px 0", textShadow: `0 0 12px ${C.cyan}55` }}>{String(rmm).padStart(2, "0")}:{String(rss).padStart(2, "0")}</div>
+            <div style={{ fontFamily: PX, fontSize: 38, color: !isUpTimer && remaining <= 0 ? C.green : C.cream, margin: "12px 0", textShadow: `0 0 12px ${C.cyan}55` }}>{String(rmm).padStart(2, "0")}:{String(rss).padStart(2, "0")}</div>
             {at.note && <div style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, marginBottom: 12, fontStyle: "italic" }}>"{at.note}"</div>}
-            {remaining <= 0 && <div style={{ fontFamily: PX, fontSize: 8, color: C.green, marginBottom: 12 }}>¡TIEMPO! Termina para guardar.</div>}
+            {isUpTimer && <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, marginBottom: 12 }}>Cronometro libre: corre hasta que toques TERMINAR.</div>}
+            {!isUpTimer && remaining <= 0 && <div style={{ fontFamily: PX, fontSize: 8, color: C.green, marginBottom: 12 }}>¡TIEMPO! Termina para guardar.</div>}
             <div style={{ display: "flex", gap: 8 }}>
               <Btn c={C.green} onClick={finishTimer}>TERMINAR</Btn>
               <button onClick={cancelTimer} style={{ flex: 1, padding: 13, fontSize: 10, background: "none", border: `2px solid ${C.line}`, color: C.muted, cursor: "pointer" }}>DESCARTAR</button>
@@ -516,16 +528,22 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
           </div>
         )}
 
-        {/* FINISHING — resultado */}
+        {/* FINISHING — resultado (tarea: nombre + minutos editables) */}
         {finishing && (
-          <FinishForm finishing={finishing} onSave={(res) => addSession({ ...finishing, resultado: res })} onSkip={() => addSession(finishing)} />
+          <FinishForm
+            finishing={finishing}
+            onSave={(res, m) => addSession(finishing.film === "tarea"
+              ? { ...finishing, intencion: res, minutes: m ?? finishing.minutes }
+              : { ...finishing, resultado: res })}
+            onSkip={() => addSession(finishing)}
+          />
         )}
 
         {/* actions */}
         {!at && !finishing && (
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <Btn onClick={() => { setShowSession((v) => !v); setShowPiece(false); }} active={showSession} c={C.cyan}>+ NUEVA SESION</Btn>
-            <Btn onClick={() => { setShowPiece((v) => !v); setShowSession(false); }} active={showPiece} c={C.gold}>+ NUEVO FILM</Btn>
+            <button className={`mainbtn${showSession ? " on" : ""}`} onClick={() => { setShowSession((v) => !v); setShowPiece(false); }} style={{ flex: 1, padding: 14, cursor: "pointer", fontFamily: PX, fontSize: 10, fontWeight: 700 }}>+ NUEVA SESION</button>
+            <button className={`mainbtn${showPiece ? " on" : ""}`} onClick={() => { setShowPiece((v) => !v); setShowSession(false); }} style={{ flex: 1, padding: 14, cursor: "pointer", fontFamily: PX, fontSize: 10, fontWeight: 700 }}>+ NUEVO FILM</button>
           </div>
         )}
         {showSession && !at && <SessionForm onStart={startTimer} onManual={addSession} onCancel={() => setShowSession(false)} streak={state.streak.count} films={state.pieces} />}
@@ -771,14 +789,31 @@ function SessionForm({ onStart, onManual, onCancel, streak, films }) {
   );
 }
 
+const TAREAS_FRECUENTES = ["baño", "cocinar", "comer", "limpieza", "tramites", "compras", "pasear"];
+
 function FinishForm({ finishing, onSave, onSkip }) {
+  const isTarea = finishing.film === "tarea";
   const [res, setRes] = useState("");
+  const [mins, setMins] = useState(String(finishing.minutes));
+  const saveMins = () => Math.max(1, parseInt(mins) || finishing.minutes);
   return (
     <FormShell accent={C.green}>
-      <div style={{ fontFamily: PX, fontSize: 8, color: C.green, marginBottom: 10 }}>SESION HECHA · {finishing.minutes} MIN</div>
-      <Field label="¿QUE LOGRASTE? (RESULTADO)"><input style={inputStyle} value={res} onChange={(e) => setRes(e.target.value)} placeholder="quedo el ritmo, falta sonido" autoFocus /></Field>
+      <div style={{ fontFamily: PX, fontSize: 8, color: C.green, marginBottom: 10 }}>{isTarea ? "🏠 TAREA HECHA" : `SESION HECHA · ${finishing.minutes} MIN`}</div>
+
+      {isTarea && (
+        <>
+          <Field label="MINUTOS (CORREGILOS SI TE OLVIDASTE DE FRENAR)"><input style={inputStyle} type="number" min="1" value={mins} onChange={(e) => setMins(e.target.value)} /></Field>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 11 }}>
+            {TAREAS_FRECUENTES.map((t) => (
+              <button key={t} onClick={() => setRes(t)} style={{ padding: "7px 11px", fontFamily: MONO, fontSize: 12.5, cursor: "pointer", borderRadius: 8, border: `2px solid ${res === t ? C.green : C.line}`, background: res === t ? "rgba(95,209,110,.15)" : C.bg, color: res === t ? C.green : C.cream }}>{t}</button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <Field label={isTarea ? "¿QUE HICISTE?" : "¿QUE LOGRASTE? (RESULTADO)"}><input style={inputStyle} value={res} onChange={(e) => setRes(e.target.value)} placeholder={isTarea ? "baño, pasear al perro, cocinar..." : "quedo el ritmo, falta sonido"} autoFocus={!isTarea} /></Field>
       <div style={{ display: "flex", gap: 8 }}>
-        <Btn c={C.green} onClick={() => onSave(res.trim())}>GUARDAR</Btn>
+        <Btn c={C.green} onClick={() => onSave(res.trim(), isTarea ? saveMins() : undefined)}>GUARDAR</Btn>
         <button onClick={onSkip} style={{ flex: 1, padding: 13, fontSize: 10, background: "none", border: `2px solid ${C.line}`, color: C.muted, cursor: "pointer" }}>SIN NOTA</button>
       </div>
     </FormShell>
