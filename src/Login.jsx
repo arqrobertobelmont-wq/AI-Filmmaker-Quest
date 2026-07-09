@@ -37,7 +37,10 @@ export default function Login() {
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `radial-gradient(120% 90% at 50% 0%, #3A2566 0%, ${C.bg} 50%, ${C.bgDeep} 100%)`, fontFamily: MONO, padding: 20 }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');`}</style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        *{box-sizing:border-box;}
+      `}</style>
       <div style={{ width: 380, maxWidth: "100%", background: C.surface, border: `4px solid ${C.line}`, boxShadow: `0 0 0 3px ${C.ink}, 0 6px 0 rgba(0,0,0,.4)`, borderRadius: 14, padding: 26 }}>
         <div style={{ fontFamily: PX, fontSize: 14, color: C.green, textAlign: "center", lineHeight: 1.5, textShadow: `2px 2px 0 ${C.ink}`, marginBottom: 6 }}>AI FILMMAKER<br />QUEST</div>
         <div style={{ fontFamily: PX, fontSize: 8, color: C.cyan, textAlign: "center", marginBottom: 22 }}>{mode === "login" ? "INICIA SESION" : "CREA TU CUENTA"}</div>
