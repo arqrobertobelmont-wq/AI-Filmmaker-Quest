@@ -903,6 +903,8 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
   const [report, setReport] = useState(null);
   const [copied, setCopied] = useState(false);
   const [minInput, setMinInput] = useState("");
+  const [rangeFrom, setRangeFrom] = useState(() => addDays(isoDate(new Date()), -27)); // ultimas 4 semanas
+  const [rangeTo, setRangeTo] = useState(() => isoDate(new Date()));
 
   const minutesByDay = {}; // heatmap de TRABAJO: las tareas no cuentan aca
   state.practice.forEach((s) => { if (s.film !== "tarea") minutesByDay[s.date] = (minutesByDay[s.date] || 0) + (s.minutes || 0); });
@@ -948,35 +950,96 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
 
   const snapshot = () => ({ weekStart: wkStart, closedAt: new Date().toISOString(), focusMin: w.focusMin, studyMin: w.studyMin, prodMin: w.prodMin, tareaMin: w.tareaMin, days: w.days, minAdv, ratio: weekRatio, films: Object.values(w.films), study: w.study, sessions: wkSessions.length });
 
+  // etiqueta legible de una sesion (film/study/tarea, sin garbling)
+  const sessLabel = (s) => s.film === "tarea"
+    ? `Tarea: ${s.intencion || "(sin nombre)"}`
+    : s.film === "study"
+      ? `Study: ${BRANCHES.find((b) => b.id === s.branch)?.name || "?"}`
+      : `${state.pieces.find((p) => p.id === s.film)?.film || "Film"} / ${PHASES.find((x) => x.id === s.phase)?.name || "?"}`;
+
   const buildReport = () => {
+    const from = rangeFrom, to = rangeTo;
+    const inRange = (dt) => dt >= from && dt <= to;
+    const sess = state.practice.filter((s) => inRange(s.date)).slice().sort((a, b) => (a.date + (a.start || "")).localeCompare(b.date + (b.start || "")));
+    const st = statsFor(sess);
     const L = [];
-    L.push(`REPORTE AI FILMMAKER QUEST — ${today}`);
-    L.push(`Racha: ${state.streak.count} dias · XP total: ${totalXP(state)}`);
+    L.push(`REPORTE AI FILMMAKER QUEST`);
+    L.push(`Periodo: ${from} a ${to} (${daysBetween(to, from) + 1} dias) · generado ${today}`);
+    L.push(`Racha actual: ${state.streak.count} dias · XP total: ${totalXP(state)} · Nivel ${classIndex(totalXP(state)) + 1} (${CLASSES[classIndex(totalXP(state))].name})`);
     L.push("");
-    L.push(`== SEMANA EN CURSO (desde ${wkStart}) ==`);
-    L.push(`Horas foco: ${focusH.toFixed(1)}h / meta ${WEEK_GOAL_H}h (${goalDiff >= 0 ? "+" : ""}${goalDiff.toFixed(1)}h)`);
-    L.push(`Produccion: ${(w.prodMin / 60).toFixed(1)}h · Study: ${(w.studyMin / 60).toFixed(1)}h · Dias activos: ${w.days}/7`);
-    L.push(`Minutos avanzados (cargados): ${minAdv} · Ratio semana (modo): ${weekRatio ? weekRatio + " h/min" : "semana base (sin metraje nuevo)"}`);
-    L.push("Films de la semana:");
-    Object.values(w.films).forEach((f) => { L.push(`  ${f.name} — ${(f.total / 60).toFixed(1)}h: ` + PHASES.filter((ph) => f.phases[ph.id]).map((ph) => `${ph.name} ${(f.phases[ph.id] / 60).toFixed(1)}h`).join(", ")); });
-    if (Object.keys(w.study).length) L.push("Study: " + Object.entries(w.study).map(([k, m]) => `${BRANCHES.find((b) => b.id === k)?.name} ${(m / 60).toFixed(1)}h`).join(", "));
+
+    L.push(`== TOTALES DEL PERIODO ==`);
+    L.push(`Foco (prod+study): ${(st.focusMin / 60).toFixed(1)}h · Produccion: ${(st.prodMin / 60).toFixed(1)}h · Study: ${(st.studyMin / 60).toFixed(1)}h · Tareas: ${(st.tareaMin / 60).toFixed(1)}h`);
+    L.push(`Dias con actividad: ${st.days} · Sesiones: ${sess.length}`);
     L.push("");
-    L.push("Sesiones de la semana:");
-    wkSessions.slice().reverse().forEach((s) => {
-      const ctx = s.film && s.film !== "study" ? `${state.pieces.find((p) => p.id === s.film)?.film || "Film"} / ${PHASES.find((x) => x.id === s.phase)?.name || "?"}` : `Study: ${BRANCHES.find((b) => b.id === s.branch)?.name || "?"}`;
-      L.push(`  ${s.date} ${s.start || ""} · ${ctx} · ${s.minutes || 0}min → ${s.intencion || "(sin intencion)"}${s.resultado ? ` ✓ ${s.resultado}` : ""}`);
+
+    L.push(`== POR DIA ==`);
+    const dayMap = {};
+    sess.forEach((s) => {
+      const r = dayMap[s.date] || (dayMap[s.date] = { prod: 0, study: 0, tarea: 0, n: 0 });
+      if (s.film === "tarea") r.tarea += s.minutes || 0; else if (s.film === "study") r.study += s.minutes || 0; else r.prod += s.minutes || 0;
+      r.n += 1;
+    });
+    Object.keys(dayMap).sort().forEach((dd) => { const r = dayMap[dd]; L.push(`  ${dd}: prod ${(r.prod / 60).toFixed(1)}h · study ${(r.study / 60).toFixed(1)}h · tareas ${(r.tarea / 60).toFixed(1)}h · ${r.n} ses`); });
+    L.push("");
+
+    L.push(`== FILMS TRABAJADOS EN EL PERIODO ==`);
+    const filmsW = Object.entries(st.films);
+    filmsW.length ? filmsW.forEach(([id, f]) => L.push(`  ${f.name} — ${(f.total / 60).toFixed(1)}h: ` + PHASES.filter((ph) => f.phases[ph.id]).map((ph) => `${ph.name} ${(f.phases[ph.id] / 60).toFixed(1)}h`).join(", "))) : L.push("  (ninguno)");
+    if (Object.keys(st.study).length) L.push("  Study: " + Object.entries(st.study).map(([k, m]) => `${BRANCHES.find((b) => b.id === k)?.name} ${(m / 60).toFixed(1)}h`).join(", "));
+    L.push("");
+
+    L.push(`== ESTADO DE CADA FILM (ciclo de 15 pasos) ==`);
+    state.pieces.forEach((p) => {
+      const steps = p.steps || {};
+      const dates = Object.values(steps).sort();
+      const cad = dates.length ? `${daysBetween(dates[dates.length - 1], dates[0]) + 1}d` : "—";
+      const doneSteps = STEPS.filter((s) => steps[s.id]);
+      L.push(`  ${p.film}${isFinal(p) ? " [TERMINADO]" : ""} — ${phasesDone(p)}/${PHASES.length} fases · ${doneSteps.length}/15 pasos · cadencia ${cad} · ${p.minutes || 0} min`);
+      if (doneSteps.length) L.push(`      pasos: ` + doneSteps.map((s) => `${s.n}(${steps[s.id]})`).join(" "));
     });
     L.push("");
-    L.push("== COSTO REAL (films terminados) ==");
+
+    L.push(`== RETROS (aprendizajes) ==`);
+    const withRetro = state.pieces.filter((p) => p.retro && (p.retro.bien || p.retro.mal || p.retro.distinto));
+    withRetro.length ? withRetro.forEach((p) => {
+      L.push(`  ${p.film}:`);
+      if (p.retro.bien) L.push(`    + BIEN: ${p.retro.bien}`);
+      if (p.retro.mal) L.push(`    - MAL/COSTO: ${p.retro.mal}`);
+      if (p.retro.distinto) L.push(`    > PROXIMO: ${p.retro.distinto}`);
+    }) : L.push("  (ninguna todavia)");
+    L.push("");
+
+    L.push(`== COSTO REAL (films terminados, todo el historial) ==`);
     finishedFilms.length ? finishedFilms.forEach((f) => L.push(`  ${f.name}: ${f.h.toFixed(1)}h / ${f.minutes}min = ${f.ratio || "—"} h/min`)) : L.push("  Aun no cerraste ningun film.");
+    L.push("");
+
     if (weeks.length) {
+      L.push(`== SEMANAS CERRADAS (para comparar) ==`);
+      weeks.forEach((k) => L.push(`  ${k.weekStart}: ${(k.focusMin / 60).toFixed(1)}h foco · prod ${(k.prodMin / 60).toFixed(1)}h · study ${(k.studyMin / 60).toFixed(1)}h · tareas ${((k.tareaMin || 0) / 60).toFixed(1)}h · avanzo ${k.minAdv}min · ratio ${k.ratio || "—"}`));
       L.push("");
-      L.push("== SEMANAS CERRADAS (para comparar) ==");
-      weeks.slice(0, 6).forEach((k) => L.push(`  ${k.weekStart}: ${(k.focusMin / 60).toFixed(1)}h foco · prod ${(k.prodMin / 60).toFixed(1)}h · study ${(k.studyMin / 60).toFixed(1)}h · avanzo ${k.minAdv}min · ratio ${k.ratio || "—"}`));
     }
+
+    const notes = (state.notes || []).filter((n) => inRange(n.date));
+    if (notes.length) {
+      L.push(`== NOTAS DEL PERIODO ==`);
+      notes.forEach((n) => { const fn = n.filmId ? state.pieces.find((p) => p.id === n.filmId)?.film || "film" : "General"; L.push(`  [${fn}] ${n.title ? n.title + " — " : ""}${n.text.replace(/\n/g, " ")}`); });
+      L.push("");
+    }
+
+    L.push(`== SESIONES (detalle, ${sess.length}) ==`);
+    sess.forEach((s) => L.push(`  ${s.date} ${s.start || ""}${s.end ? `-${s.end}` : ""} · ${sessLabel(s)} · ${s.minutes || 0}min${s.film !== "tarea" ? ` · +${s.xp || 0}xp` : ""}${s.intencion && s.film !== "tarea" ? ` → ${s.intencion}` : ""}${s.resultado ? ` ✓ ${s.resultado}` : ""}`));
+
     return L.join("\n");
   };
   const onExport = () => { const r = buildReport(); setReport(r); setCopied(false); try { navigator.clipboard?.writeText(r).then(() => setCopied(true)).catch(() => { }); } catch (e) { } };
+  const onExportJSON = () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `ai-filmmaker-quest-datos-${today}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
 
   if (state.practice.length === 0 && weeks.length === 0)
     return <p style={{ fontFamily: MONO, fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>Sin sesiones todavia. Toca + SESION para arrancar tu primer bloque de foco. Aca vas a ver el mapa de constancia, el resumen de la semana, y vas a poder cerrar la semana y exportarla para evaluarla juntos.</p>;
@@ -1077,7 +1140,28 @@ function BitacoraEval({ state, recent, onSetWeekMinutes, onCloseWeek }) {
       )}
 
       {/* export */}
-      <button onClick={onExport} style={{ width: "100%", padding: 13, fontSize: 9, marginBottom: 10, border: `3px solid ${C.green}`, background: "transparent", color: C.green, cursor: "pointer" }}>⤓ EXPORTAR PARA EVALUAR</button>
+      <div style={{ ...panel({ borderRadius: 0 }), padding: 12, marginBottom: 10 }}>
+        <div style={{ fontFamily: PX, fontSize: 8, color: C.green, marginBottom: 10 }}>⤓ EXPORTAR PARA EVALUAR</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <label style={{ flex: "1 1 130px" }}><span style={{ display: "block", fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 5 }}>DESDE</span>
+            <input type="date" value={rangeFrom} max={rangeTo} onChange={(e) => setRangeFrom(e.target.value)} style={{ width: "100%", background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: "8px 10px", fontSize: 13, fontFamily: MONO, borderRadius: 8 }} /></label>
+          <label style={{ flex: "1 1 130px" }}><span style={{ display: "block", fontFamily: PX, fontSize: 7, color: C.muted, marginBottom: 5 }}>HASTA</span>
+            <input type="date" value={rangeTo} min={rangeFrom} max={today} onChange={(e) => setRangeTo(e.target.value)} style={{ width: "100%", background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: "8px 10px", fontSize: 13, fontFamily: MONO, borderRadius: 8 }} /></label>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {[["4 sem", 27], ["8 sem", 55], ["Este mes", "month"], ["Todo", "all"]].map(([lbl, val]) => (
+            <button key={lbl} onClick={() => {
+              if (val === "month") { setRangeFrom(today.slice(0, 8) + "01"); setRangeTo(today); }
+              else if (val === "all") { const ds = state.practice.map((s) => s.date).sort(); setRangeFrom(ds[0] || today); setRangeTo(today); }
+              else { setRangeFrom(addDays(today, -val)); setRangeTo(today); }
+            }} style={{ fontFamily: PX, fontSize: 7, color: C.cyan, background: "none", border: `2px solid ${C.line}`, borderRadius: 6, padding: "6px 9px", cursor: "pointer" }}>{lbl}</button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onExport} style={{ flex: 1, padding: 12, fontSize: 8.5, border: `3px solid ${C.green}`, background: "transparent", color: C.green, cursor: "pointer" }}>REPORTE (TEXTO)</button>
+          <button onClick={onExportJSON} style={{ flex: 1, padding: 12, fontSize: 8.5, border: `3px solid ${C.cyan}`, background: "transparent", color: C.cyan, cursor: "pointer" }}>⬇ JSON COMPLETO</button>
+        </div>
+      </div>
       {report && (
         <div style={{ ...panel({ borderRadius: 0, borderColor: C.green }), padding: 12, marginBottom: 10 }}>
           <div style={{ fontFamily: MONO, fontSize: 11, color: C.muted, marginBottom: 8 }}>{copied ? "✓ Copiado. " : ""}Copia este texto y pegamelo en el chat para que analicemos los patrones.</div>
