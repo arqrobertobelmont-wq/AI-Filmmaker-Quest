@@ -7,10 +7,13 @@ import { supabase } from "./supabase.js";
 
 // ---- publicador de stats agregadas (tabla public_stats, lectura publica) ----
 // Solo numeros: nada de notas, intenciones ni tareas domesticas.
+// Solo publica la cuenta real: las cuentas de prueba guardan su estado privado pero no pisan las stats publicas.
+const PUBLIC_STATS_OWNER = "7ef328ab-d69c-4bb4-9f4a-43579c0b1ada";
 let lastPublished = null;
 const localDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 async function publishPublicStats(stateJson) {
   try {
+    if (currentUserId !== PUBLIC_STATS_OWNER) return; // solo la cuenta real publica
     const d = JSON.parse(stateJson);
     const practice = d.practice || [];
     const pieces = d.pieces || [];
