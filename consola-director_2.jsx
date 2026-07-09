@@ -223,6 +223,7 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   const [finishing, setFinishing] = useState(null);
   const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
   const [celebrate, setCelebrate] = useState(null); // { n: sesiones de hoy, xp } al completar una sesion
+  const [retroFor, setRetroFor] = useState(null); // id del film para la retro (al marcar FINAL o al editar)
   const [, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -305,14 +306,20 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
   };
   const togglePhase = (id, phaseId) => {
     let streak = state.streak;
+    let openRetro = false;
     const pieces = state.pieces.map((p) => {
       if (p.id !== id) return p;
       const phases = { ...p.phases, [phaseId]: !p.phases[phaseId] };
-      if (phaseId === FINAL_PHASE && phases[FINAL_PHASE]) streak = bumpStreak(streak, todayStr()); // terminar cuenta como actividad
+      if (phaseId === FINAL_PHASE && phases[FINAL_PHASE]) {
+        streak = bumpStreak(streak, todayStr()); // terminar cuenta como actividad
+        if (!p.retro) openRetro = true; // primer FINAL: pedir la retro
+      }
       return { ...p, phases };
     });
     persist({ ...state, pieces, streak });
+    if (openRetro) setRetroFor(id);
   };
+  const saveRetro = (id, retro) => persist({ ...state, pieces: state.pieces.map((p) => p.id === id ? { ...p, retro } : p) });
   const toggleStep = (pieceId, stepId) => {
     const step = STEPS.find((s) => s.id === stepId); if (!step) return;
     const pieces = state.pieces.map((p) => {
@@ -420,6 +427,7 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
       `}</style>
 
       {celebrate && <SessionCelebration n={celebrate.n} xp={celebrate.xp} streak={state.streak.count} onClose={() => setCelebrate(null)} />}
+      {retroFor != null && (() => { const pr = state.pieces.find((p) => p.id === retroFor); return pr ? <RetroForm film={pr} onSave={(r) => { saveRetro(retroFor, r); setRetroFor(null); }} onClose={() => setRetroFor(null)} /> : null; })()}
 
       <div className="shell">
         {/* ===== MAIN (sin sidebar; se navega por pestañas) ===== */}
@@ -614,7 +622,7 @@ export default function ArcadeConsole({ onLogout, userEmail } = {}) {
               {state.pieces.map((p) => {
                 const phaseMin = {};
                 state.practice.forEach((s) => { if (s.film === p.id && s.phase) phaseMin[s.phase] = (phaseMin[s.phase] || 0) + (s.minutes || 0); });
-                return <ProjectCard key={p.id} p={p} phaseMin={phaseMin} onTogglePhase={(ph) => togglePhase(p.id, ph)} onMinutes={(m) => setProjectMinutes(p.id, m)} onRemove={() => removePiece(p.id)} />;
+                return <ProjectCard key={p.id} p={p} phaseMin={phaseMin} onTogglePhase={(ph) => togglePhase(p.id, ph)} onMinutes={(m) => setProjectMinutes(p.id, m)} onRemove={() => removePiece(p.id)} onEditRetro={() => setRetroFor(p.id)} />;
               })}
             </div>
           )}
@@ -701,6 +709,36 @@ function SessionCelebration({ n, xp, streak, onClose }) {
         </div>
         <div style={{ fontFamily: PX, fontSize: 10, color: C.cyan, marginBottom: 20 }}>+{xp} XP</div>
         <button onClick={onClose} style={{ padding: "12px 26px", fontFamily: PX, fontSize: 9, color: C.ink, background: perfect ? C.gold : C.green, border: `3px solid ${C.ink}`, borderRadius: 10, cursor: "pointer", fontWeight: 700, boxShadow: "0 4px 0 rgba(0,0,0,.4)" }}>SEGUIR</button>
+      </div>
+    </div>
+  );
+}
+
+// retro post-film: 3 preguntas de practica deliberada al marcar FINAL (o al editar)
+const RETRO_Q = [
+  { k: "bien", label: "¿QUE SALIO BIEN?", ph: "el ritmo del guion, la consistencia de personaje...", c: C.green },
+  { k: "mal", label: "¿QUE SALIO MAL / TE COSTO?", ph: "me estanque en el storyboard, subestime las horas de GENS...", c: C.danger },
+  { k: "distinto", label: "¿QUE VAS A HACER DISTINTO EN EL PROXIMO?", ph: "cerrar el guion antes de tocar imagenes...", c: C.cyan },
+];
+function RetroForm({ film, onSave, onClose }) {
+  const [f, setF] = useState({ bien: film.retro?.bien || "", mal: film.retro?.mal || "", distinto: film.retro?.distinto || "" });
+  const set = (k, v) => setF((o) => ({ ...o, [k]: v }));
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(16,9,32,.85)", animation: "fadein .2s ease-out", padding: 16, overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ ...panel({ borderColor: C.gold }), animation: "risein .35s cubic-bezier(.2,1.4,.4,1) both", padding: "22px 24px", width: 460, maxWidth: "100%", boxShadow: `0 0 0 3px ${C.ink}, 0 0 40px ${C.gold}44, 0 8px 0 rgba(0,0,0,.35)` }}>
+        <div style={{ fontFamily: PX, fontSize: 11, color: C.gold, marginBottom: 6, textShadow: `2px 2px 0 ${C.ink}` }}>★ RETRO DEL FILM</div>
+        <div style={{ fontFamily: MONO, fontSize: 13, color: C.cream, marginBottom: 4, fontWeight: 700 }}>{film.film}</div>
+        <div style={{ fontFamily: MONO, fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 16 }}>Un minuto de analisis. Esto es lo que te va a hacer mejor pelicula tras pelicula.</div>
+        {RETRO_Q.map((q) => (
+          <label key={q.k} style={{ display: "block", marginBottom: 12 }}>
+            <span style={{ display: "block", fontFamily: PX, fontSize: 7, color: q.c, marginBottom: 6 }}>{q.label}</span>
+            <textarea value={f[q.k]} onChange={(e) => set(q.k, e.target.value)} placeholder={q.ph} rows={2} style={{ width: "100%", background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: "9px 11px", fontSize: 13, fontFamily: MONO, borderRadius: 8, resize: "vertical", lineHeight: 1.5 }} />
+          </label>
+        ))}
+        <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+          <button onClick={() => onSave(f)} style={{ flex: 1, padding: 13, fontFamily: PX, fontSize: 9, color: C.ink, background: C.gold, border: `3px solid ${C.ink}`, borderRadius: 10, cursor: "pointer", fontWeight: 700, boxShadow: "0 4px 0 rgba(0,0,0,.4)" }}>GUARDAR RETRO</button>
+          <button onClick={onClose} style={{ padding: "13px 16px", fontFamily: PX, fontSize: 9, color: C.muted, background: "none", border: `2px solid ${C.line}`, borderRadius: 10, cursor: "pointer" }}>DESPUES</button>
+        </div>
       </div>
     </div>
   );
@@ -1458,7 +1496,7 @@ function Campaign({ film, start, sessions, onClear }) {
   );
 }
 
-function ProjectCard({ p, phaseMin = {}, onTogglePhase, onMinutes, onRemove }) {
+function ProjectCard({ p, phaseMin = {}, onTogglePhase, onMinutes, onRemove, onEditRetro }) {
   const done = phasesDone(p);
   const allDone = done === PHASES.length;
   const pct = Math.round((done / PHASES.length) * 100);
@@ -1516,6 +1554,36 @@ function ProjectCard({ p, phaseMin = {}, onTogglePhase, onMinutes, onRemove }) {
           style={{ width: 70, background: C.bg, border: `2px solid ${C.line}`, color: C.cream, padding: "6px 8px", fontSize: 13, fontFamily: MONO, borderRadius: 0 }} />
         {final && <span style={{ fontFamily: PX, fontSize: 7, color: C.gold }}>→ AL METRAJE</span>}
       </div>
+
+      {/* RETRO del film */}
+      {(() => {
+        const r = p.retro;
+        const has = r && (r.bien || r.mal || r.distinto);
+        const row = (label, val, c) => val ? (
+          <div style={{ marginBottom: 7 }}>
+            <div style={{ fontFamily: PX, fontSize: 6.5, color: c, marginBottom: 3 }}>{label}</div>
+            <div style={{ fontFamily: MONO, fontSize: 12, color: C.cream, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{val}</div>
+          </div>
+        ) : null;
+        if (!has) {
+          return (
+            <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+              <button onClick={onEditRetro} style={{ width: "100%", padding: 9, fontFamily: PX, fontSize: 7.5, color: C.muted, background: "none", border: `2px dashed ${C.line}`, borderRadius: 8, cursor: "pointer" }}>★ AGREGAR RETRO DEL FILM</button>
+            </div>
+          );
+        }
+        return (
+          <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontFamily: PX, fontSize: 7, color: C.gold }}>★ RETRO</span>
+              <button onClick={onEditRetro} style={{ fontFamily: PX, fontSize: 7, color: C.cyan, background: "none", border: `2px solid ${C.line}`, borderRadius: 6, padding: "4px 7px", cursor: "pointer" }}>✎ EDITAR</button>
+            </div>
+            {row("BIEN", r.bien, C.green)}
+            {row("MAL / COSTO", r.mal, C.danger)}
+            {row("PROXIMO", r.distinto, C.cyan)}
+          </div>
+        );
+      })()}
 
       {/* horas por fase */}
       <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
